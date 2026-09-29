@@ -36,6 +36,7 @@
       }
     },
     "verificado": false,
+    "medido": "30-09-2026: una imagen de google/nano-banana (texto a imagen, sin referencias) descontó 4 créditos del saldo (1003,16 -> 999,16), lo que dice esta tabla. Falta medir los modelos de edición CON referencias, Seedream y Nano Banana Pro, y el precio real del crédito.",
     "nota": "kie.ai cobra en CREDITOS y por imagen, lleve las referencias que lleve: aqui no hay tokens de entrada, y ese es todo el ahorro frente a gpt-image-2 (donde las referencias son el 87 % del gasto). Los creditos por modelo se escribieron SIN poder abrir kie.ai/pricing: 'verificado' pasa a true cuando herramientas/probar_kie.py los compare con lo que la cuenta descuenta de verdad. Un modelo con creditos por resolucion (1K/2K/4K) cobra segun la calidad pedida (low/medium/high, ver motores/imagen_kie/modelos.json)."
   },
   "tts": {

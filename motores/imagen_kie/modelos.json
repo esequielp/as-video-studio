@@ -2,6 +2,8 @@
   "version": 1,
   "nota": "Los modelos de imagen de kie.ai que sabe llamar motores/imagen_kie/imagen.py. Es DATO y no codigo a proposito: la API de kie.ai es de un intermediario y cambia de nombres, de campos y de precios sin avisar. Todo lo que hay aqui se escribio sin poder abrir docs.kie.ai desde el entorno donde se programo, asi que cada modelo lleva 'verificado': false hasta que la Fase 0 (herramientas/probar_kie.py) lo compruebe contra la cuenta real. Los precios NO viven aqui: viven en tarifas.json (bloque 'kie'), que es la unica tabla de precios del Estudio.",
   "por_defecto": "google/nano-banana-edit",
+  "medido": "30-09-2026, contra la cuenta real: createTask con model 'google/nano-banana' e input {prompt, image_size '3:2', output_format 'png'} se acepta y sale en ~57 s; recordInfo devuelve el resultado en resultJson.resultUrls, servido desde tempfile.aiquickdraw.com. Falta: los modelos de edicion con referencias (necesitan la subida a kieai.redpandaai.co).",
+  "dominios": "api.kie.ai (tareas y saldo), kieai.redpandaai.co (subida de referencias), tempfile.aiquickdraw.com (descarga del resultado): los tres tienen que estar permitidos en la red del servidor.",
   "sin_referencias": "Cada modelo de edicion necesita al menos una imagen. Para dibujar SIN ninguna (las laminas de un estilo descrito, pasos/moodboard.py) se usa el modelo de 'sin_referencias' de su ficha, con los mismos campos menos el de las referencias.",
   "modelos": {
     "google/nano-banana-edit": {
