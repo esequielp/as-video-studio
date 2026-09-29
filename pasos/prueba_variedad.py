@@ -159,6 +159,12 @@ def prueba_capitulos():
     igual(publicacion.capitulos(guion, {"bloques": meta["bloques"][:3]}), [],
           "con menos de tres capitulos no se ponen: YouTube no los aceptaria")
     igual(publicacion.capitulos(guion, {}), [], "sin voz no hay minutos, y no se inventan")
+    igual([c["id"] for c in publicacion.capitulos(guion, dict(meta, duracion=135.0))],
+          ["B001", "B003", "B005"],
+          "un ultimo capitulo de menos de diez segundos hasta el final se junta")
+    igual([c["id"] for c in publicacion.capitulos(guion, dict(meta, duracion=200.0))],
+          ["B001", "B003", "B005", "B006"],
+          "con tiempo de sobra al final, el ultimo se queda")
 
     seccion("lo que diga el modelo se limpia")
     datos = {"titulos": ["Uno", "Uno", "x" * 200, "Tres", "Cuatro"],

@@ -96,7 +96,20 @@ def capitulos(guion, meta_voz):
         if capitulo["t"] - juntos[-1]["t"] < MIN_SEGUNDOS_CAPITULO:
             continue
         juntos.append(capitulo)
+    # y el ULTIMO tambien, hasta el final de la voz: con uno de cinco segundos
+    # al cierre YouTube no reconoce ninguno de los capitulos
+    duracion = _segundos_o_none((meta_voz or {}).get("duracion"))
+    if (duracion is not None and len(juntos) > 1
+            and duracion - juntos[-1]["t"] < MIN_SEGUNDOS_CAPITULO):
+        juntos.pop()
     return juntos if len(juntos) >= MIN_CAPITULOS else []
+
+
+def _segundos_o_none(valor):
+    try:
+        return float(valor)
+    except (TypeError, ValueError):
+        return None
 
 
 def _instruccion(titulo, idioma, bloques, caps):
