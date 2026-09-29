@@ -55,7 +55,9 @@ AVISO_SINTETICO = (
 
 
 def _reloj(segundos):
-    segundos = int(max(0, round(float(segundos))))
+    # HACIA ABAJO y no al mas cercano: un capitulo que arranca en 1:16 cuando la
+    # voz empieza en 1:15,5 se come media palabra; en 1:15 entra con aire
+    segundos = int(max(0.0, float(segundos)))
     horas, resto = divmod(segundos, 3600)
     minutos, segundos = divmod(resto, 60)
     return f"{horas}:{minutos:02d}:{segundos:02d}" if horas else f"{minutos}:{segundos:02d}"
@@ -182,11 +184,11 @@ def componer(titulo, caps, datos=None):
 
 def texto_de(ficha):
     """La ficha como se pega en YouTube Studio."""
-    partes = ["TITULO (elige uno):"]
+    partes = ["TÍTULO (elige uno):"]
     partes += [f"  {i}. {t}" for i, t in enumerate(ficha["titulos"], start=1)]
-    partes += ["", "DESCRIPCION:", ficha["descripcion"] or "(escríbela tú)"]
+    partes += ["", "DESCRIPCIÓN:", ficha["descripcion"] or "(escríbela tú)"]
     if ficha["capitulos"]:
-        partes += ["", "CAPITULOS (van dentro de la descripción):"]
+        partes += ["", "CAPÍTULOS (van dentro de la descripción):"]
         partes += [f"{c['reloj']} {c['titulo']}" for c in ficha["capitulos"]]
     if ficha["hashtags"]:
         partes += ["", " ".join(ficha["hashtags"])]

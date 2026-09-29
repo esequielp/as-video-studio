@@ -8975,6 +8975,98 @@ def generar_video(pid: str, cuerpo: dict = Body(default=None)):
 
 
 # ==========================================================================
+# UN SHORT SACADO DE UN VIDEO LARGO
+#
+# Mismo material, mismo estilo y misma voz; guion PROPIO, vertical y de menos de
+# un minuto. No se recorta el largo: un trozo de un documental no tiene gancho ni
+# cierre, y en un Short eso es todo. Se duplica el proyecto DESDE EL GUION --el
+# material y el encargo viajan; el guion, la voz y las imagenes no, que en
+# vertical son otras de todas formas (el tamano entra en la huella de cada
+# imagen)-- y se le escribe al redactor que es un Short y de que largo sale.
+# ==========================================================================
+
+#: Duracion de un Short: YouTube admite hasta tres minutos, pero lo que funciona
+#: esta por debajo del minuto.
+DURACION_SHORT_S = 55
+DURACION_SHORT_MAX_S = 170
+
+INSTRUCCION_SHORT = (
+    "ES UN SHORT DE YOUTUBE: vertical y de unos {segundos} segundos, sacado del "
+    "mismo material que el video largo «{titulo}». No lo resumas entero: elige UN "
+    "solo momento, dato o giro --el mas fuerte-- y cuentalo completo. El gancho es "
+    "la primera frase, se dice en dos o tres segundos y NO puede ser el del video "
+    "largo. Frases cortas, sin introducciones. Cierra en una frase invitando a ver "
+    "el video completo en el canal.")
+
+
+@app.post("/api/proyectos/{pid}/short", status_code=201)
+def crear_short(pid: str, cuerpo: dict = Body(default=None)):
+    """Un Short vertical sacado de este video: mismo material, guion propio. -> el nuevo"""
+    if PASOS_MODULOS is None:
+        raise ErrorApi(503, f"los pasos no se han podido cargar: {ERROR_PASOS}")
+    ctx = contexto(pid)
+    datos = _cuerpo(cuerpo)
+    if not ctx.proyecto.version_activa("guion"):
+        raise ErrorApi(409, "este vídeo todavía no tiene guion: un Short se saca "
+                            "de un vídeo ya escrito")
+    if ctx.gestor.listar(activos=True):
+        raise ErrorApi(409, "hay trabajos corriendo en este vídeo: espera a que "
+                            "terminen para sacar un Short")
+    try:
+        segundos = int(datos.get("duracion_s") or DURACION_SHORT_S)
+    except (TypeError, ValueError):
+        raise ErrorApi(400, "duracion_s tiene que ser un numero de segundos")
+    segundos = max(15, min(DURACION_SHORT_MAX_S, segundos))
+
+    guion_largo = PASOS_MODULOS.comun.leer_salida(
+        ctx.proyecto, "guion", "guion.json", obligatorio=False) or {}
+    titulo = str(guion_largo.get("titulo") or ctx.proyecto.config.get("nombre")
+                 or ctx.id).strip()
+    base = str(datos.get("nombre") or f"Short · {titulo}").strip()[:60]
+    nombre, intento = base, 1
+    while os.path.isdir(os.path.join(raiz_proyectos(), identificador(nombre))):
+        intento += 1
+        nombre = f"{base} {intento}"
+    if not identificador(nombre):
+        raise ErrorApi(400, f"'{nombre}' no da un identificador valido")
+
+    saltar = tuple(["guion"] + list(descendientes_de("guion")))
+    try:
+        nuevo = ctx.proyecto.duplicar(raiz_proyectos(), nombre, saltar=saltar)
+    except OSError as fallo:
+        raise ErrorApi(500, f"no se ha podido crear el Short: {fallo}")
+    destino = contexto(nuevo.id)
+    # EL CANAL VIAJA: con el mismo estilo el Short comparte la memoria del canal
+    # (pasos/variedad.py), y eso es lo que le impide abrir con el mismo gancho
+    # que el largo del que sale.
+    for clave in (CONFIG_VIDEO_LIGHT, CONFIG_ESTILO_LIGHT):
+        if ctx.proyecto.config.get(clave):
+            destino.proyecto.config[clave] = ctx.proyecto.config[clave]
+    destino.proyecto.config["short_de"] = ctx.id
+    destino.proyecto.guardar_config()
+
+    brief = {"formato": PASOS_MODULOS.comun.normalizar_formato("vertical"),
+             "duracion_objetivo_s": segundos}
+    _validar_params("brief", brief, destino)
+    destino.estado.actualizar_params("brief", brief)
+    # las ediciones a mano del guion largo no son de este: se vacian
+    guion = {"prompt_general": INSTRUCCION_SHORT.format(segundos=segundos,
+                                                        titulo=titulo),
+             "bloques": {}}
+    _validar_params("guion", guion, destino)
+    destino.estado.actualizar_params("guion", guion)
+    # y a ritmo de Short: planos cortos, que en vertical se miran en un movil
+    for paso_id, valores in PASOS_MODULOS.presets_light.params_de_ritmo("medio").items():
+        destino.estado.actualizar_params(paso_id, valores)
+
+    destino.bitacora.anotar("short_creado", None, {"de": ctx.id, "segundos": segundos})
+    ctx.bitacora.anotar("short_sacado", None, {"a": nuevo.id})
+    return {"proyecto": ficha_proyecto(destino), "short_de": ctx.id,
+            "segundos": segundos,
+            "pasos": [ficha_paso(destino, p["id"]) for p in PASOS]}
+
+
+# ==========================================================================
 # LA FICHA DE PUBLICACION (pasos/publicacion.py)
 #
 # Titulo, descripcion, capitulos y etiquetas para subir el video a YouTube. No

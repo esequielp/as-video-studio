@@ -8377,6 +8377,17 @@ function vistaVideoLight() {
        una frase suelta y descargar-- y no habia forma de leer los grupos. */
     h('span', { clase: 'crece' }),
     botonAplicarRepaso(),
+    /* UN SHORT DE ESTE VÍDEO: otro proyecto, vertical y de menos de un minuto,
+       con el mismo material y el mismo estilo pero su propio guion (ver
+       `crear_short` en app.py). Solo con un vídeo que no sea ya un Short. */
+    (hayMp4Light() && formatoDelVideo() !== 'vertical') ? conAyuda(
+      'Crea un vídeo nuevo, vertical y de unos 55 segundos, con el mismo '
+      + 'material y el mismo estilo. Su guion es propio: un solo momento, con '
+      + 'otro gancho, y cierra invitando a ver este vídeo. Este no se toca.',
+      h('button', {
+        clase: 'mini', disabled: !!trabajoVideoLight(),
+        onclick: () => sacarShortLight(),
+      }, 'Sacar un Short')) : null,
     hayMp4Light() ? conAyuda(
       'Baja el MP4 tal y como esta ahora mismo.',
       h('a', {
@@ -8391,6 +8402,21 @@ function vistaVideoLight() {
   // y lo último, lo que hace falta para subirlo
   if (hayMp4Light() && !trabajoVideoLight()) caja.appendChild(panelPublicacion());
   return caja;
+}
+
+/* Crea el Short y lo abre: lo siguiente es generar su guion, desde su propio
+   encargo, que es donde se ve de qué va a ir. */
+async function sacarShortLight() {
+  const v = videoAbierto();
+  if (!v.pid) return;
+  try {
+    const datos = await pedir(`${API.proyecto(v.pid)}/short`,
+                              { method: 'POST', cuerpo: {} });
+    toast('Short creado: genera su guion para empezar');
+    await abrirVideoLight(datos.proyecto.id);
+  } catch (e) {
+    toast(e.message, true);
+  }
 }
 
 /* LA FICHA PARA YOUTUBE (pasos/publicacion.py): títulos, descripción,

@@ -3389,6 +3389,63 @@ def probar_taller_oculto(cliente):
           "pero sigue abriendose por su id: es donde corre la generacion")
 
 
+def probar_fabrica(cliente, pid):
+    """Lo de la fabrica de YouTube: kie.ai, la tanda de produccion, el Short y la ficha.
+
+    Nada de esto genera: se mira que las rutas digan lo que tienen que decir y,
+    sobre todo, que un proyecto de OpenAI siga naciendo exactamente igual.
+    """
+    seccion("LA FABRICA: KIE.AI, PRODUCCION, SHORT Y FICHA DE PUBLICACION")
+    respuesta, datos = cliente.get("/api/ajustes")
+    igual(datos["ajustes"].get("motor_imagen"), "openai",
+          "el motor de imagen de fabrica es OpenAI")
+    ok("google/nano-banana-edit" in (datos.get("modelos_kie") or {}),
+       "los ajustes listan los modelos de kie.ai")
+    ok((datos.get("costes_kie") or {}).get("low"),
+       f"y lo que cuesta una imagen de kie.ai por calidad: {datos.get('costes_kie')}")
+
+    _, openai = cliente.post("/api/estimacion", {"duracion_objetivo_s": 600,
+                                                 "ritmo": "medio"})
+    _, kie = cliente.post("/api/estimacion", {"duracion_objetivo_s": 600,
+                                              "ritmo": "medio", "motor_imagen": "kie"})
+    ok(kie["coste"]["usd_por_imagen"] < openai["coste"]["usd_por_imagen"],
+       f"con kie.ai la imagen sale mas barata en la estimacion "
+       f"({kie['coste']['usd_por_imagen']} frente a {openai['coste']['usd_por_imagen']})")
+    _, documental = cliente.post("/api/estimacion", {"duracion_objetivo_s": 600,
+                                                     "ritmo": "documental"})
+    ok(documental["planos"]["total"] < openai["planos"]["total"] / 2,
+       f"el ritmo documental pide menos de la mitad de planos "
+       f"({documental['planos']['total']} frente a {openai['planos']['total']})")
+
+    # un proyecto nuevo con el ajuste de fabrica NO lleva motor_imagen: la misma
+    # firma que antes de que existiera kie.ai
+    _, creado = cliente.post("/api/proyectos", {"nombre": "fabrica openai"})
+    nuevo = creado["proyecto"]["id"]
+    _, paso = cliente.get(f"/api/proyectos/{nuevo}/pasos/assets")
+    ok("motor_imagen" not in (paso.get("params") or {}),
+       "un proyecto nuevo con OpenAI no escribe motor_imagen en sus params")
+    cliente.put("/api/ajustes", {"motor_imagen": "kie"})
+    _, creado = cliente.post("/api/proyectos", {"nombre": "fabrica kie"})
+    otro = creado["proyecto"]["id"]
+    _, paso = cliente.get(f"/api/proyectos/{otro}/pasos/assets")
+    igual((paso.get("params") or {}).get("motor_imagen"), "kie",
+          "con el ajuste en kie.ai, el proyecto nuevo nace con motor_imagen=kie")
+    cliente.put("/api/ajustes", {"motor_imagen": "openai"})
+
+    respuesta, plan = cliente.get(f"/api/proyectos/{pid}/generar?tanda=produccion")
+    igual(respuesta.status_code, 200, "el plan de la tanda de produccion responde 200")
+    igual(plan.get("pestanas"), ["voz", "video", "render"],
+          "y recorre voz, imagenes y montaje en un solo trabajo")
+
+    respuesta, datos = cliente.get(f"/api/proyectos/{nuevo}/publicacion")
+    igual((respuesta.status_code, datos.get("ficha")), (200, None),
+          "sin ficha escrita, la ficha es None")
+    respuesta, _ = cliente.post(f"/api/proyectos/{nuevo}/publicacion", {})
+    igual(respuesta.status_code, 409, "sin guion no se escribe la ficha: 409")
+    respuesta, _ = cliente.post(f"/api/proyectos/{nuevo}/short", {})
+    igual(respuesta.status_code, 409, "ni se saca un Short: 409")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Prueba del servicio HTTP")
     parser.add_argument("--conservar", action="store_true",
@@ -3416,6 +3473,7 @@ def main():
         probar_modo_light(cliente)
         probar_video_light(cliente)
         probar_estimacion(cliente)
+        probar_fabrica(cliente, pid)
         probar_planos_hechos(cliente, pid)
         probar_escucha_de_voz_light(cliente)
         probar_muestras_recuperadas(cliente)

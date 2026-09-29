@@ -47,6 +47,7 @@ Reglas que valen para toda la API y no se repiten en cada fila:
 | `GET` | `/api/proyectos/{pid}/repaso/imagenes/{nombre}` | Una imagen de referencia de una nota. |
 | `DELETE` | `/api/proyectos/{pid}/repaso/{nid}` | Quita una nota del repaso. |
 | `PUT` | `/api/proyectos/{pid}/repaso/{nid}` | Cambia el texto, el instante o las imágenes de una nota. |
+| `POST` | `/api/proyectos/{pid}/short` | Un Short vertical sacado de este video: mismo material, guion propio. -> el nuevo |
 
 ## Pasos: estado, params y ejecución
 
@@ -263,4 +264,4 @@ Reglas que valen para toda la API y no se repiten en cada fila:
 
 ---
 
-**149 endpoints.** Escrito por `generar_api.py` desde `app.py`.
+**150 endpoints.** Escrito por `generar_api.py` desde `app.py`.
