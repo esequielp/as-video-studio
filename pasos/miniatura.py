@@ -42,13 +42,25 @@ CALIDAD = "medium"
 MAX_REFERENCIAS = 2
 
 PROMPT = (
-    "A YouTube thumbnail, 16:9. {escena} "
+    "A YouTube thumbnail, 16:9. {escena} {tipo}"
     "Match the drawing style, colour palette and characters of the reference "
-    "images exactly: they are frames of the same video. One dominant subject, "
-    "large in frame; strong contrast; two or three bold colours; a simple, "
-    "uncluttered background. Keep the left third of the frame calm and darker "
-    "so a title can be written over it. Absolutely no text, letters, numbers or "
-    "logos anywhere in the image.")
+    "images exactly: they are frames of the same video, and the thumbnail must "
+    "show something the video really shows. One dominant subject, large in "
+    "frame and readable at a very small size; two or three saturated colours "
+    "with strong contrast, no large areas of mid grey; a simple, uncluttered "
+    "background. Keep the left third of the frame calm and darker so a title "
+    "can be written over it, and keep the bottom-right corner empty. "
+    "Absolutely no text, letters, numbers or logos anywhere in the image.")
+
+#: Lo que se le recalca al generador segun el tipo de concepto. Los tres existen
+#: para la prueba A/B de YouTube: tres ideas distintas, no tres rotulos.
+POR_TIPO = {
+    "emocion": "Close-up: the character's face shows an exaggerated, readable "
+               "emotion (surprise, fear or awe) that is obvious at thumbnail size. ",
+    "curiosidad": "The subject is an intriguing object or detail that raises a "
+                  "question without answering it. ",
+    "momento": "A wider shot of the single most dramatic moment, frozen at its peak. ",
+}
 
 
 def leer(proyecto):
@@ -61,6 +73,16 @@ def leer(proyecto):
             return json.load(fh)
     except (OSError, ValueError):
         return None
+
+
+def conceptos_de(proyecto):
+    """Los conceptos de miniatura de la ficha guardada, limpios. -> [{tipo, escena, texto}]
+
+    Pasan otra vez por `publicacion._miniatura_de` para que una ficha escrita
+    antes del cambio (una escena y tres textos) siga valiendo sin reescribirla.
+    """
+    ficha = publicacion.leer(proyecto) or {}
+    return publicacion._miniatura_de(ficha.get("miniatura")).get("conceptos") or []
 
 
 def referencias_del_video(proyecto):
@@ -123,13 +145,35 @@ def _lineas(texto, fuente, ancho_max, dibujo):
     return [texto] if solo <= ancho_max and len(palabras) <= 2 else mejor[1]
 
 
+def _oscurecer_izquierda(imagen):
+    """Un degradado negro sobre la mitad izquierda, fuerte al borde y nulo al medio.
+
+    El texto tiene que leerse en un movil y en modo oscuro, sobre cualquier cosa
+    que haya dibujado el generador: el borde negro de las letras ayuda, pero
+    sobre un fondo con detalle no basta. El degradado no tapa el sujeto, que va
+    en el centro o a la derecha.
+    """
+    ancho, alto = imagen.size
+    mascara = Image.new("L", (ancho, alto), 0)
+    tope = int(ancho * 0.55)
+    # linear_gradient va de 0 (arriba) a 255 (abajo); girada un cuarto en el
+    # sentido del reloj, va de 255 (izquierda) a 0 (derecha): fuerte en el
+    # borde y nula al llegar al tope
+    columnas = Image.linear_gradient("L").rotate(-90, expand=True).resize((tope, alto))
+    columnas = columnas.point(lambda v: int(v * 0.62))
+    mascara.paste(columnas, (0, 0))
+    negro = Image.new("RGB", (ancho, alto), (0, 0, 0))
+    return Image.composite(negro, imagen, mascara)
+
+
 def rotular(imagen, texto):
     """El texto grande, blanco con borde negro, en el tercio izquierdo. -> Image"""
     imagen = imagen.copy()
-    dibujo = ImageDraw.Draw(imagen)
     texto = " ".join(str(texto or "").upper().split())
     if not texto:
         return imagen
+    imagen = _oscurecer_izquierda(imagen)
+    dibujo = ImageDraw.Draw(imagen)
     ancho_max = int(imagen.width * 0.46)
     alto_max = int(imagen.height * 0.62)
     tam = 150
@@ -157,9 +201,8 @@ def generar(proyecto, params_assets, avisar=None):
     Necesita la ficha de publicacion (la idea) y planos dibujados (el estilo).
     """
     avisar = avisar or (lambda *a, **k: None)
-    ficha = publicacion.leer(proyecto) or {}
-    idea = ficha.get("miniatura") or {}
-    if not idea.get("escena"):
+    conceptos = conceptos_de(proyecto)
+    if not conceptos:
         raise RuntimeError("falta la idea de la miniatura: escribe (o reescribe) "
                            "antes la ficha de publicación")
     referencias = referencias_del_video(proyecto)
@@ -175,29 +218,34 @@ def generar(proyecto, params_assets, avisar=None):
     p = dict(params_assets or {})
     motor = p6_assets._motor_generador(p)
     extra = {"modelo": p6_assets._modelo_kie(p)} if p6_assets._usa_kie(p) else {}
-    prompt = PROMPT.format(escena=idea["escena"])
-    textos = idea.get("textos") or [""]
-    hechas, coste, sello = [], 0.0, time.strftime("%Y%m%d_%H%M%S")
+    hechas, prompts, coste = [], [], 0.0
+    sello = time.strftime("%Y%m%d_%H%M%S")
     for indice in range(CUANTAS):
+        # UN CONCEPTO POR MINIATURA; si la ficha trae menos, se repiten --otra
+        # tirada de la misma idea sigue siendo otra imagen--
+        concepto = conceptos[indice % len(conceptos)]
         avisar(0.05 + 0.9 * indice / CUANTAS,
                f"miniatura {indice + 1} de {CUANTAS}")
+        prompt = PROMPT.format(escena=concepto["escena"],
+                               tipo=POR_TIPO.get(concepto.get("tipo"), ""))
+        prompts.append(prompt)
         try:
             png, meta = motor.generar(prompt, referencias, quality=CALIDAD,
                                       tamano="apaisado", **extra)
         except SystemExit as fallo:
             raise RuntimeError(f"el motor de imagen aborto: {fallo}") from fallo
         fondo = _recortar(png)
-        texto = textos[indice % len(textos)]
+        texto = concepto.get("texto") or ""
         nombre = f"{sello}_{indice + 1}"
         ruta_fondo = os.path.join(carpeta, f"fondo_{nombre}.png")
         ruta = os.path.join(carpeta, f"miniatura_{nombre}.jpg")
         fondo.save(ruta_fondo, "PNG")
         rotular(fondo, texto).save(ruta, "JPEG", quality=90, optimize=True)
         coste += float(meta.get("coste") or 0.0)
-        hechas.append({"n": indice + 1, "texto": texto,
+        hechas.append({"n": indice + 1, "texto": texto, "tipo": concepto.get("tipo"),
                        "ruta": os.path.relpath(ruta, proyecto.raiz).replace("\\", "/"),
                        "fondo": os.path.relpath(ruta_fondo, proyecto.raiz).replace("\\", "/")})
-    indice_doc = {"miniaturas": hechas, "prompt": prompt, "coste_usd": round(coste, 4),
+    indice_doc = {"miniaturas": hechas, "prompts": prompts, "coste_usd": round(coste, 4),
                   "motor": "kie" if extra else "openai", "fecha": sello}
     comun.escribir_json(proyecto.ruta(CARPETA, INDICE), indice_doc)
     avisar(1.0, f"{len(hechas)} miniaturas listas")

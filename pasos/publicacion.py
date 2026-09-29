@@ -127,19 +127,34 @@ def _instruccion(titulo, idioma, bloques, caps):
         f"  - etiquetas: hasta {MAX_ETIQUETAS} busquedas con las que alguien "
         "encontraria este video.",
         "  - hashtags: tres, sin espacios.",
-        "  - miniatura: la idea de la miniatura. 'escena' describe EN INGLES "
-        "una sola imagen que haga querer pulsar: UN sujeto dominante y grande, "
-        "un momento concreto del video, mucho contraste, fondo sencillo, y el "
-        "tercio izquierdo despejado para poner texto encima. Sin letras en la "
-        "imagen. 'textos' son tres opciones de TRES A CUATRO palabras como "
-        "mucho, en el idioma del video, que NO repitan el titulo: la miniatura "
-        "crea la intriga y el titulo la explica.",
+        "  - miniaturas: TRES CONCEPTOS DISTINTOS para la prueba A/B de "
+        "YouTube, que elige la ganadora por TIEMPO DE VISUALIZACION y no por "
+        "clics: una miniatura que promete lo que el video no ensena pronto "
+        "gana el clic y pierde la prueba. Por eso las tres ensenan algo que "
+        "SALE EN EL PRIMER MINUTO del guion (el gancho y lo que lo sigue). Uno "
+        "de cada tipo, en este orden:",
+        "      emocion: un personaje del relato con una expresion exagerada "
+        "(sorpresa, miedo, asombro), de cerca;",
+        "      curiosidad: un objeto, un detalle o un simbolo que deja una "
+        "pregunta sin contestar;",
+        "      momento: el instante mas fuerte del gancho, en plano abierto.",
+        "    De cada uno, 'escena' EN INGLES: una sola imagen, UN sujeto "
+        "dominante y grande, dos o tres colores saturados con mucho contraste, "
+        "fondo sencillo, el tercio izquierdo mas oscuro y despejado para el "
+        "texto y la esquina inferior derecha libre (ahi YouTube pone la "
+        "duracion). Sin letras en la imagen. Y 'texto': de DOS A CUATRO "
+        "palabras en el idioma del video, que NO repitan el titulo --la "
+        "miniatura abre la pregunta y el titulo la explica-- y que no prometan "
+        "nada que el video no cuente.",
         "",
         "Responde UNICAMENTE con un objeto JSON con esta forma:",
         '{"titulos": ["...", "...", "..."], "descripcion": "...", '
         '"capitulos": [{"id": "B001", "titulo": "..."}], '
         '"etiquetas": ["..."], "hashtags": ["#..."], '
-        '"miniatura": {"escena": "...", "textos": ["...", "...", "..."]}}',
+        '"miniatura": {"conceptos": ['
+        '{"tipo": "emocion", "escena": "...", "texto": "..."}, '
+        '{"tipo": "curiosidad", "escena": "...", "texto": "..."}, '
+        '{"tipo": "momento", "escena": "...", "texto": "..."}]}}',
     ])
 
 
@@ -196,16 +211,40 @@ def componer(titulo, caps, datos=None):
 MAX_PALABRAS_MINIATURA = 4
 
 
+TIPOS_MINIATURA = ("emocion", "curiosidad", "momento")
+
+
+def _corto(texto):
+    palabras = " ".join(str(texto or "").split()).split()
+    return " ".join(palabras[:MAX_PALABRAS_MINIATURA])
+
+
 def _miniatura_de(crudo):
-    """La idea de la miniatura, limpia: {escena, textos}. Vacia si no la hay."""
+    """La idea de las miniaturas, limpia: {conceptos: [{tipo, escena, texto}]}.
+
+    Son TRES CONCEPTOS y no una escena con tres textos: la prueba A/B de
+    YouTube compara imagenes, y tres versiones de la misma solo miden la
+    tipografia. Se sigue leyendo la forma de antes (`escena` + `textos`), que
+    es la de las fichas escritas antes del cambio: sale un concepto por texto.
+    """
     crudo = crudo if isinstance(crudo, dict) else {}
-    textos = []
-    for texto in _limpia(crudo.get("textos"), 3):
-        palabras = texto.split()
-        if palabras:
-            textos.append(" ".join(palabras[:MAX_PALABRAS_MINIATURA]))
-    return {"escena": " ".join(str(crudo.get("escena") or "").split())[:800],
-            "textos": textos}
+    conceptos = []
+    for indice, concepto in enumerate(crudo.get("conceptos") or []):
+        if not isinstance(concepto, dict):
+            continue
+        escena = " ".join(str(concepto.get("escena") or "").split())[:800]
+        if not escena:
+            continue
+        tipo = str(concepto.get("tipo") or "").strip().lower()
+        conceptos.append({"tipo": tipo if tipo in TIPOS_MINIATURA
+                          else TIPOS_MINIATURA[indice % len(TIPOS_MINIATURA)],
+                          "escena": escena, "texto": _corto(concepto.get("texto"))})
+    if not conceptos and crudo.get("escena"):
+        escena = " ".join(str(crudo["escena"]).split())[:800]
+        textos = [t for t in (_corto(t) for t in _limpia(crudo.get("textos"), 3)) if t]
+        conceptos = [{"tipo": "momento", "escena": escena, "texto": t}
+                     for t in (textos or [""])]
+    return {"conceptos": conceptos[:3]}
 
 
 def texto_de(ficha):

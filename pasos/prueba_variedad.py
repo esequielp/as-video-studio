@@ -199,10 +199,19 @@ def prueba_miniaturas():
     import miniatura
     from PIL import Image
 
-    ficha = publicacion.componer("T", [], {"miniatura": {
+    vieja = publicacion.componer("T", [], {"miniatura": {
         "escena": "A lighthouse in a storm", "textos": ["once noches sin luz y mas", "", "El farero"]}})
-    igual(ficha["miniatura"]["textos"], ["once noches sin luz", "El farero"],
-          "los textos se quedan en cuatro palabras como mucho y sin vacios")
+    igual([c["texto"] for c in vieja["miniatura"]["conceptos"]],
+          ["once noches sin luz", "El farero"],
+          "una ficha de antes (escena + textos) sigue valiendo, con los textos en cuatro palabras")
+    ficha = publicacion.componer("T", [], {"miniatura": {"conceptos": [
+        {"tipo": "emocion", "escena": "The keeper's terrified face", "texto": "Once noches sin luz"},
+        {"tipo": "curiosidad", "escena": "A broken lens in a glass case", "texto": "Sigue rota"},
+        {"tipo": "raro", "escena": "The lighthouse in a storm", "texto": "Ningún barco"},
+        {"tipo": "momento", "escena": "", "texto": "sin escena"}]}})
+    conceptos = ficha["miniatura"]["conceptos"]
+    igual([c["tipo"] for c in conceptos], ["emocion", "curiosidad", "momento"],
+          "tres conceptos, uno de cada tipo; un tipo desconocido cae en el que toca y uno sin escena se descarta")
 
     proyecto_m = proyecto("con miniaturas")
     os.makedirs(proyecto_m.raiz, exist_ok=True)
@@ -230,18 +239,28 @@ def prueba_miniaturas():
         miniatura.referencias_del_video, miniatura.p6_assets._motor_generador = originales
     igual(len(hecho["miniaturas"]), 3, "tres propuestas")
     igual(len(pedidas), 3, "tres imagenes pedidas al motor del proyecto")
-    comprobar("A lighthouse in a storm" in pedidas[0][0] and "no text" in pedidas[0][0],
-              "con la escena de la ficha y sin letras dentro de la imagen")
+    comprobar("terrified face" in pedidas[0][0] and "broken lens" in pedidas[1][0]
+              and "lighthouse in a storm" in pedidas[2][0],
+              "UNA IDEA DISTINTA por miniatura, para que la prueba A/B compare algo")
+    comprobar("exaggerated" in pedidas[0][0] and "no text" in pedidas[0][0]
+              and "bottom-right corner empty" in pedidas[0][0],
+              "con la indicacion de su tipo, sin letras y con la esquina de la duracion libre")
+    igual([m["tipo"] for m in hecho["miniaturas"]], ["emocion", "curiosidad", "momento"],
+          "y cada una dice de que tipo es")
     igual(pedidas[0][2].get("modelo", "x"), None,
           "con kie.ai se pasa el modelo del proyecto (None = el por defecto)")
     primera = Image.open(proyecto_m.ruta(hecho["miniaturas"][0]["ruta"]))
     igual(primera.size, (1280, 720), "cada miniatura mide 1280x720")
+    izquierda = primera.convert("RGB").getpixel((3, 700))
+    derecha = primera.convert("RGB").getpixel((1270, 700))
+    comprobar(sum(izquierda) < sum(derecha),
+              "el borde izquierdo se oscurece para que el texto se lea en un movil")
     fondo = Image.open(proyecto_m.ruta(hecho["miniaturas"][0]["fondo"])).convert("RGB")
     igual(fondo.size, (1280, 720), "y queda al lado su version sin texto, del mismo tamano")
     comprobar(primera.convert("RGB").tobytes() != fondo.tobytes(),
               "el texto se ha puesto encima de la version con texto")
     igual(hecho["coste_usd"], 0.06, "y se apunta lo que costaron")
-    igual(miniatura.leer(proyecto_m)["miniaturas"][0]["texto"], "once noches sin luz",
+    igual(miniatura.leer(proyecto_m)["miniaturas"][0]["texto"], "Once noches sin luz",
           "el indice se lee de vuelta")
 
 

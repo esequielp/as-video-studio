@@ -8499,6 +8499,7 @@ function panelPublicacion() {
    de la ficha y el estilo de los planos del vídeo. Cuestan tres imágenes, así
    que el precio va en el botón, antes de pulsar. */
 const CLAVE_MINIATURAS = 'miniaturas';
+const TIPOS_MINIATURA = { emocion: 'Emoción', curiosidad: 'Curiosidad', momento: 'Momento' };
 const MINIATURAS = { pid: '', datos: null };
 
 async function cargarMiniaturas() {
@@ -8542,9 +8543,10 @@ function bloqueMiniaturas() {
     h('h3', {}, 'Miniaturas'),
     h('span', { clase: 'crece' }),
     conAyuda(datos.con_idea
-      ? `Dibuja ${datos.cuantas} propuestas de 1280×720 con el estilo de los planos `
-        + `de este vídeo y un texto corto encima (${precio}). Al lado queda cada una `
-        + 'sin texto, por si prefieres rotularla tú.'
+      ? `Dibuja ${datos.cuantas} ideas distintas de 1280×720 —una emoción, una `
+        + 'curiosidad y el momento del gancho— con el estilo de los planos de este '
+        + `vídeo y un texto corto encima (${precio}). Al lado queda cada una sin `
+        + 'texto, por si prefieres rotularla tú.'
       : 'Reescribe la ficha: la idea de la miniatura sale de ella.',
       h('button', {
         clase: 'mini', disabled: dibujando || !datos.con_idea,
@@ -8555,10 +8557,15 @@ function bloqueMiniaturas() {
   if (error) caja.appendChild(cajaError(error));
   const hechas = ((datos.hechas || {}).miniaturas) || [];
   if (hechas.length) {
+    caja.appendChild(h('div', { clase: 'pista' },
+      'Súbelas las tres a la prueba A/B de YouTube Studio (al editar el vídeo, '
+      + '«Probar y comparar»): elige la ganadora por TIEMPO DE VISUALIZACIÓN, no '
+      + 'por clics, así que gana la que atrae a quien de verdad se queda.'));
     caja.appendChild(h('div', { clase: 'rejilla-miniaturas' },
       ...hechas.map(m => h('figure', {},
         h('img', { src: API.archivo(v.pid, m.ruta), alt: m.texto || '' }),
         h('figcaption', {},
+          m.tipo ? `${TIPOS_MINIATURA[m.tipo] || m.tipo} · ` : '',
           h('a', { href: API.archivo(v.pid, m.ruta), download: '' }, 'Bajar'),
           ' · ',
           h('a', { href: API.archivo(v.pid, m.fondo), download: '' }, 'sin texto'))))));

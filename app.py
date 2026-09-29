@@ -9166,11 +9166,10 @@ def leer_miniaturas(pid: str):
     assets = ctx.estado.params("assets") or {}
     por_imagen = _usd_por_imagen(miniatura.CALIDAD, assets.get("motor_imagen") or "openai",
                                  assets.get("modelo_imagen"))
-    ficha = PASOS_MODULOS.publicacion.leer(ctx.proyecto) or {}
     return {"hechas": miniatura.leer(ctx.proyecto),
             "cuantas": miniatura.CUANTAS,
             "usd_previsto": round(por_imagen * miniatura.CUANTAS, 3),
-            "con_idea": bool((ficha.get("miniatura") or {}).get("escena")),
+            "con_idea": bool(miniatura.conceptos_de(ctx.proyecto)),
             "trabajo": _trabajo_de_miniaturas(ctx) or {}}
 
 
@@ -9180,8 +9179,7 @@ def hacer_miniaturas(pid: str):
     if PASOS_MODULOS is None:
         raise ErrorApi(503, f"los pasos no se han podido cargar: {ERROR_PASOS}")
     ctx = contexto(pid)
-    ficha = PASOS_MODULOS.publicacion.leer(ctx.proyecto) or {}
-    if not (ficha.get("miniatura") or {}).get("escena"):
+    if not PASOS_MODULOS.miniatura.conceptos_de(ctx.proyecto):
         raise ErrorApi(409, "falta la idea de la miniatura: escribe antes la ficha "
                             "de publicación (o reescríbela si es de antes)")
     if not PASOS_MODULOS.miniatura.referencias_del_video(ctx.proyecto):
