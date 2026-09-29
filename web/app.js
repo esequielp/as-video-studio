@@ -375,6 +375,7 @@ const API = {
   archivo: (pid, ruta) => `${BASE}/a/${encodeURIComponent(pid)}/${String(ruta).split('\\').join('/')
     .split('/').map(encodeURIComponent).join('/')}`,
   coste: pid => `${BASE}/api/proyectos/${encodeURIComponent(pid)}/coste`,
+  publicacion: pid => `${BASE}/api/proyectos/${encodeURIComponent(pid)}/publicacion`,
   costePorPaso: pid => `${BASE}/api/proyectos/${encodeURIComponent(pid)}/coste/por-paso`,
   costePresupuesto: pid => `${BASE}/api/proyectos/${encodeURIComponent(pid)}/coste/presupuesto`,
   capturas: (pid, consulta) => `${BASE}/api/proyectos/${encodeURIComponent(pid)}/capturas`
@@ -2278,6 +2279,7 @@ function pintarConfig() {
   caja.appendChild(bloquePruebaClaves());
   caja.appendChild(seccionOpenAI(ficha));
   caja.appendChild(seccionCalidadImagen());
+  caja.appendChild(seccionKie(ficha));
   caja.appendChild(seccionCartesia(ficha));
   caja.appendChild(seccionCLI());
   caja.appendChild(seccionOtrasClaves(ficha));
@@ -2434,6 +2436,88 @@ function seccionOpenAI(ficha) {
     caja.appendChild(h('div', { clase: 'meta' },
       `${viva.limite_por_minuto} imágenes/min`
       + (viva.medido ? ' (medido en tus tandas)' : ' (según el plan)')));
+  }
+  return caja;
+}
+
+/* Cambia un ajuste de imagen y vuelve a leer TODOS los ajustes: el coste de
+   kie.ai por calidad depende del modelo elegido, y lo calcula el servidor. */
+async function guardarAjusteImagen(cambios) {
+  try {
+    await pedir(API.ajustes(), { method: 'PUT', cuerpo: cambios });
+  } catch (e) {
+    toast(e.message, true);
+  }
+  await cargarAjustes();
+}
+
+/* KIE.AI: EL OTRO PROVEEDOR DE IMÁGENES, y el más barato.
+ *
+ * Con OpenAI el grueso de lo que cuesta un plano son sus referencias (estilo,
+ * reparto, continuidad), que se pagan como tokens de entrada. kie.ai cobra una
+ * tarifa plana por imagen, lleve las que lleve. Como la calidad, el motor es el
+ * PUNTO DE PARTIDA de los vídeos NUEVOS: se escribe en el proyecto al crearlo y
+ * un vídeo ya pagado con OpenAI no se pasa solo a kie.ai. */
+function seccionKie(ficha) {
+  const kie = ficha.kie || { puesta: false, cola: '' };
+  const vista = estadoConfig();
+  const datos = vista.ajustes;
+  const campo = h('input', {
+    type: 'password',
+    placeholder: kie.puesta ? `puesta (${kie.cola})` : 'sin poner',
+  });
+  const caja = h('section', { clase: 'bloque-config' },
+    h('div', { clase: 'fila' },
+      h('h3', {}, 'kie.ai — imágenes más baratas'),
+      h('span', { clase: 'crece' }),
+      pastillaEstado(kie.puesta ? 'ok' : 'vacio', kie.puesta ? kie.cola : 'sin poner')),
+    h('div', { clase: 'pista' },
+      'Opcional. Genera las mismas imágenes con modelos como Nano Banana o '
+      + 'Seedream por una tarifa plana: las referencias no se pagan aparte. '
+      + 'La clave se saca en kie.ai → API Key.'),
+    h('div', { clase: 'fila-clave' }, campo,
+      h('button', {
+        clase: 'mini',
+        onclick: () => {
+          if (!campo.value.trim()) { toast('escribe la clave', true); return; }
+          guardarClaves({ kie: { clave: campo.value.trim() } });
+          campo.value = '';
+        },
+      }, 'Cambiar'),
+      (kie.puesta ? h('button', {
+        clase: 'mini fantasma peligro',
+        onclick: () => {
+          if (!window.confirm('¿Quitar la clave de kie.ai? Los vídeos que '
+            + 'generan con kie.ai no podrán dibujar más planos.')) return;
+          guardarClaves({ kie: { clave: '' } });
+        },
+      }, 'Quitar') : null)));
+  if (!datos || !datos.ajustes) return caja;
+
+  const motor = datos.ajustes.motor_imagen || 'openai';
+  caja.appendChild(campoSelect('Con quién se generan los vídeos nuevos', motor, [
+    { valor: 'openai', nombre: 'OpenAI (gpt-image-2)' },
+    { valor: 'kie', nombre: 'kie.ai' },
+  ], valor => {
+    if (valor === 'kie' && !kie.puesta) toast('pon antes la clave de kie.ai', true);
+    guardarAjusteImagen({ motor_imagen: valor });
+  }, 'Los vídeos que ya existen siguen con el suyo.'));
+
+  if (motor === 'kie') {
+    const modelos = datos.modelos_kie || {};
+    caja.appendChild(campoSelect('Modelo', datos.ajustes.modelo_imagen || '',
+      [{ valor: '', nombre: 'el recomendado' }].concat(
+        Object.entries(modelos).map(([id, nombre]) => ({ valor: id, nombre }))),
+      valor => guardarAjusteImagen({ modelo_imagen: valor })));
+    const costes = datos.costes_kie || {};
+    const calidad = datos.ajustes.calidad_imagen;
+    const precio = costes[calidad];
+    caja.appendChild(h('div', { clase: 'meta' },
+      precio === null || precio === undefined
+        ? 'Sin tarifa para este modelo en tarifas.json: el coste saldrá «sin tarifa».'
+        : `${Number(precio).toFixed(3)} $ por imagen en calidad ${calidad}, `
+          + 'referencias incluidas (tarifa sin verificar: compruébala con '
+          + 'herramientas/probar_kie.py).'));
   }
   return caja;
 }
@@ -2651,7 +2735,8 @@ async function probarCuentaCLI(cid) {
    que no cuestan dinero. Es el mismo bloque en Configuración y en la última
    tarjeta de la guía. */
 const NOMBRES_PROVEEDOR = {
-  openai: 'OpenAI — imágenes', cartesia: 'Cartesia — voz', jamendo: 'Jamendo — música',
+  openai: 'OpenAI — imágenes', kie: 'kie.ai — imágenes',
+  cartesia: 'Cartesia — voz', jamendo: 'Jamendo — música',
   freesound: 'FreeSound — efectos', claude: 'Claude',
 };
 
@@ -3691,6 +3776,25 @@ function proveedorDe(agregado, nombre) {
   });
 }
 
+/* LAS IMÁGENES, SE HAGAN CON QUIEN SE HAGAN. Hay dos proveedores de imagen
+   (OpenAI y kie.ai, `motor_imagen` en assets) y quien mira el gasto quiere
+   saber cuánto van las imágenes, no con quién: se suman en una ficha con la
+   misma forma que `proveedorDe`. */
+function imagenesDe(agregado) {
+  const uno = proveedorDe(agregado, 'openai');
+  const otro = proveedorDe(agregado, 'kie');
+  const usd = (uno.usd === null && otro.usd === null) ? null
+    : Number(uno.usd || 0) + Number(otro.usd || 0);
+  return Object.assign({}, uno, {
+    usd,
+    eventos: uno.eventos + otro.eventos,
+    sin_tarifa: !!(uno.sin_tarifa || otro.sin_tarifa),
+    usd_estimado: !!(uno.usd_estimado || otro.usd_estimado),
+    cantidad: Object.assign({}, uno.cantidad, {
+      imagenes: uno.cantidad.imagenes + otro.cantidad.imagenes }),
+  });
+}
+
 function importeCoste(ficha, hueco) {
   if (!ficha) return h('span', { clase: 'meta' }, '—');
   // sin un solo evento no hay importe que ensenar: un '$0.00' ahi se lee como
@@ -3722,6 +3826,12 @@ function pintarCoste() {
 
   nodo.appendChild(h('span', { clase: 'prov' }, h('b', {}, 'OpenAI'), importeCoste(abierto),
     h('span', { clase: 'meta' }, `${corto(abierto.tokens.total)} tok`)));
+  // kie.ai solo si se ha usado: un proyecto de OpenAI ve la cabecera de siempre
+  const kie = proveedorDe(datos, 'kie');
+  if (kie.eventos) {
+    nodo.appendChild(h('span', { clase: 'prov' }, h('b', {}, 'kie.ai'), importeCoste(kie),
+      h('span', { clase: 'meta' }, `${corto(kie.cantidad.imagenes)} img`)));
+  }
   nodo.appendChild(h('span', { clase: 'prov' }, h('b', {}, 'TTS'), importeCoste(voz),
     h('span', { clase: 'meta' }, `${corto(voz.cantidad.caracteres)} car`)));
   // Claude va sin importe y no entra en el TOTAL
@@ -3820,7 +3930,8 @@ async function pintarDesgloseCoste() {
   vaciar(caja);
 
   const fila = ficha => {
-    const abierto = proveedorDe(ficha, 'openai');
+    // la columna es la de las IMÁGENES: OpenAI y kie.ai juntos
+    const abierto = imagenesDe(ficha);
     const voz = proveedorDe(ficha, 'tts');
     const cli = proveedorDe(ficha, 'claude_cli');
     return [
@@ -3837,7 +3948,7 @@ async function pintarDesgloseCoste() {
   };
 
   const tabla = h('table', { clase: 'tabla coste-pasos' },
-    h('tr', {}, h('th', {}, 'Paso'), h('th', {}, 'OpenAI'), h('th', {}, ''),
+    h('tr', {}, h('th', {}, 'Paso'), h('th', {}, 'Imágenes'), h('th', {}, ''),
       h('th', {}, 'TTS'), h('th', {}, ''), h('th', {}, 'Claude'), h('th', {}, 'Total')));
   for (const ficha of (porPaso && listaDe(porPaso.pasos)) || []) {
     if (!ficha.eventos) continue;
@@ -6446,7 +6557,8 @@ async function lanzarTandaLight(tanda, modo) {
         // previsualizador: es la parada nueva y es lo que hay que mirar antes
         // de gastar el render (ver TANDAS_LIGHT en app.py).
         if (tanda === 'video') { PREVIA.ficha = null; v.vista = 'previa'; }
-        else if (tanda === 'render') v.vista = 'video';
+        // la de producción acaba en el MP4, igual que la del render
+        else if (tanda === 'render' || tanda === 'produccion') v.vista = 'video';
         // regenerado desde el encargo, lo que toca mirar es el guion nuevo;
         // desde cualquier otra pantalla no se mueve a nadie
         else if (tanda === 'guion' && v.vista === 'encargo_video') v.vista = 'guion';
@@ -6712,7 +6824,7 @@ function costeLightAhora() {
       + 'el modo editor.',
   });
   if (!datos) { caja.appendChild(h('span', { clase: 'meta' }, 'coste: —')); return caja; }
-  const abierto = proveedorDe(datos, 'openai');
+  const abierto = imagenesDe(datos);
   const voz = proveedorDe(datos, 'tts');
   const cli = proveedorDe(datos, 'claude_cli');
   caja.appendChild(h('span', { clase: 'prov' }, h('b', {}, 'Imágenes'),
@@ -7210,8 +7322,10 @@ function pieLight() {
      cada repintado no son dos peticiones por segundo. */
   refrescarPlanLight('voz');
   refrescarPlanLight('video');
+  refrescarPlanLight('produccion');
   const quedaVoz = quedaTandaLight('voz');
   const quedaVideo = quedaTandaLight('video');
+  const quedaTodo = quedaTandaLight('produccion');
   return h('div', { clase: 'pie-guion' },
     conAyuda(unirAyuda(ayudaAudio(hayAudio, quedaVoz), textoDelPlan('voz')),
       h('button', {
@@ -7257,6 +7371,20 @@ function pieLight() {
         onclick: () => lanzarTandaLight('video'),
       }, (hayVideo && obsoleto) ? 'Poner al día las imágenes'
          : 'Generar imágenes')),
+    /* LA FÁBRICA: del guion revisado al MP4 de una tirada (tanda
+       'produccion' en app.py). Es la única parada que protege dinero —lo que
+       sale mal después se rehace suelto y las firmas no repagan el resto—, así
+       que desde aquí se puede saltar las demás. Solo con guion, y apagado si
+       no queda nada que hacer. */
+    conAyuda(unirAyuda(
+      'Graba la voz, dibuja las imágenes y monta el vídeo de una tirada, sin '
+      + 'parar en cada pantalla. Lo que ya esté hecho y al día se salta; si '
+      + 'después una imagen no te gusta, se rehace sola.',
+      textoDelPlan('produccion')),
+      h('button', {
+        disabled: corriendo || !hayGuion || quedaTodo === false,
+        onclick: () => lanzarTandaLight('produccion'),
+      }, 'Producir el vídeo')),
     /* LA PASTILLA SOLO SI ESTE BOTON TIENE ALGO QUE HACER.
        Miraba el estado de los pasos y el boton mira el PLAN, y no son lo
        mismo: regenerar las capas deja el MP4 viejo --y eso es verdad-- pero la
@@ -8260,6 +8388,83 @@ function vistaVideoLight() {
      nada que comentar, y una caja de texto vacía debajo de una barra de
      progreso invita a escribir sobre algo que todavía no existe. */
   if (hayMp4Light() && !trabajoVideoLight()) caja.appendChild(panelRepaso());
+  // y lo último, lo que hace falta para subirlo
+  if (hayMp4Light() && !trabajoVideoLight()) caja.appendChild(panelPublicacion());
+  return caja;
+}
+
+/* LA FICHA PARA YOUTUBE (pasos/publicacion.py): títulos, descripción,
+   capítulos y etiquetas. Los capítulos salen de las secciones del guion y de
+   los tiempos de la voz; el modelo solo los nombra. Se escribe como TRABAJO
+   (una llamada al CLI puede pasar del minuto que aguanta el proxy) y se lee
+   del proyecto, así que sobrevive a recargar la página. */
+const CLAVE_PUBLICACION = 'publicacion';
+const PUBLICACION = { pid: '', ficha: null, texto: '', leida: false };
+
+async function cargarPublicacion() {
+  const pid = videoAbierto().pid;
+  try {
+    const datos = await pedir(API.publicacion(pid));
+    if (videoAbierto().pid !== pid) return;
+    PUBLICACION.ficha = datos.ficha || null;
+    PUBLICACION.texto = datos.texto || '';
+    PUBLICACION.leida = true;
+    const tid = (datos.trabajo || {}).id;
+    if (tid && !APP.seguimientos[CLAVE_PUBLICACION]) {
+      seguirTrabajo(CLAVE_PUBLICACION, tid, () => cargarPublicacion());
+    }
+  } catch (e) {
+    PUBLICACION.leida = true;
+  }
+  pintarLight();
+}
+
+async function escribirPublicacion() {
+  const pid = videoAbierto().pid;
+  limpiarError(CLAVE_PUBLICACION);
+  try {
+    const datos = await pedir(API.publicacion(pid), { method: 'POST' });
+    seguirTrabajo(CLAVE_PUBLICACION, datos.trabajo_id, () => cargarPublicacion());
+  } catch (e) {
+    mostrarError(CLAVE_PUBLICACION, e);
+  }
+  pintarLight();
+}
+
+function panelPublicacion() {
+  const v = videoAbierto();
+  if (PUBLICACION.pid !== v.pid) {
+    Object.assign(PUBLICACION, { pid: v.pid, ficha: null, texto: '', leida: false });
+    cargarPublicacion();
+  }
+  const trabajo = APP.trabajos[CLAVE_PUBLICACION] || {};
+  const escribiendo = trabajo.estado === 'ejecutando';
+  const caja = h('section', { clase: 'panel-publicacion' },
+    h('div', { clase: 'fila' },
+      h('h3', {}, 'Para subirlo a YouTube'),
+      h('span', { clase: 'crece' }),
+      conAyuda('Escribe tres títulos, la descripción, los capítulos con su '
+        + 'minuto y las etiquetas, a partir del guion y de los tiempos de la voz. '
+        + 'Va con la suscripción de Claude: no cuesta dinero.',
+        h('button', {
+          clase: PUBLICACION.ficha ? 'mini' : 'mini primario',
+          disabled: escribiendo || !PUBLICACION.leida,
+          onclick: () => escribirPublicacion(),
+        }, escribiendo ? 'escribiendo…'
+          : (PUBLICACION.ficha ? 'Reescribir la ficha' : 'Escribir la ficha')))));
+  const error = ERRORES[CLAVE_PUBLICACION];
+  if (error) caja.appendChild(cajaError(error));
+  if (!PUBLICACION.ficha) return caja;
+  if (PUBLICACION.ficha.aviso) {
+    caja.appendChild(h('div', { clase: 'caja-aviso' }, PUBLICACION.ficha.aviso));
+  }
+  caja.appendChild(h('pre', { clase: 'ficha-publicacion' }, PUBLICACION.texto));
+  caja.appendChild(h('div', { clase: 'fila' },
+    h('button', {
+      clase: 'mini',
+      onclick: () => navigator.clipboard.writeText(PUBLICACION.texto)
+        .then(() => toast('ficha copiada'), () => toast('no se ha podido copiar', true)),
+    }, 'Copiar')));
   return caja;
 }
 /* ==========================================================================

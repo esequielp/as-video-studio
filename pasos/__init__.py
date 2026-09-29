@@ -48,6 +48,10 @@ from . import cadencia, fuentes  # noqa: E402,F401
 # usan p3_guion y app.py, y `PASOS_MODULOS.cta` no puede depender de que p3 lo
 # importe primero.
 from . import cta  # noqa: E402,F401
+# variedad (la memoria del canal: que gancho y que estructura toca en cada
+# video) solo usa la biblioteca estandar; la usa p3_guion. Declarado por lo
+# mismo que cta.
+from . import variedad  # noqa: E402,F401
 from . import conservar, voz_descrita  # noqa: E402,F401
 from . import marcas_tts  # noqa: E402,F401
 from . import p1_ingesta, p2_brief, p3_guion  # noqa: E402,F401
@@ -68,6 +72,9 @@ from . import repaso  # noqa: E402,F401
 # detras de el.
 from . import enrutar_estilo  # noqa: E402,F401
 from . import presets_light  # noqa: E402,F401
+# publicacion (la ficha para subir a YouTube) no es un paso del grafo: lee lo
+# que ya hay y lo usa app.py como tarea suelta.
+from . import publicacion  # noqa: E402,F401
 
 MODULOS = {
     "ingesta": p1_ingesta,
@@ -98,4 +105,5 @@ __all__ = ["catalogo_visual", "conservar", "repaso",
            "presets_light", "recetas", "sonido", "tipografia", "subtitulos", "tono", "transiciones",
            "voz_descrita",
            "p6_assets", "p7_callouts", "p8_render",
+           "variedad", "publicacion",
            "MODULOS", "modulo_de"]

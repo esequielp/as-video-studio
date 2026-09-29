@@ -1932,6 +1932,20 @@ button.primario.grande { padding: 9px 18px; font-size: 14px; }
    pausa, se pulsa, y el sitio donde teclear sale justo debajo. Un formulario en
    otra parte de la pantalla obliga a volver a buscar el momento. */
 .repaso { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+
+/* La ficha para YouTube, debajo del repaso: el texto tal y como se pega en
+   YouTube Studio, así que va en su letra y respetando los saltos de línea. */
+.panel-publicacion {
+  margin-top: 16px; background: var(--hueco); border: 1px solid var(--linea);
+  border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.panel-publicacion h3 { margin: 0; font-size: 15px; }
+.ficha-publicacion {
+  margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 13px;
+  line-height: 1.45; max-height: 420px; overflow: auto;
+  background: var(--lienzo); border: 1px solid var(--linea); border-radius: 8px;
+  padding: 10px;
+}
 .repaso-cab { display: flex; align-items: baseline; gap: 10px; }
 .repaso-cab h3 { margin: 0; font-size: 15px; }
 

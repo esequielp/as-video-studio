@@ -103,6 +103,9 @@ def _vacio():
         "version": 1,
         "openai": [],
         "cartesia": {"clave": ""},
+        # El otro proveedor de imagenes (motores/imagen_kie). Una sola clave:
+        # kie.ai es una cuenta con creditos, no un reparto entre cuentas.
+        "kie": {"clave": ""},
         # La musica y los efectos: se buscan en catalogos con licencia libre y
         # cada uno pide su clave. Sin ellas el paso de sonido no busca nada y lo
         # dice; no impide montar el video.
@@ -156,7 +159,7 @@ def _normalizar(datos):
     elif isinstance(cartesia, str):
         base["cartesia"]["clave"] = cartesia.strip()
 
-    for suelta in ("jamendo", "freesound"):
+    for suelta in ("kie", "jamendo", "freesound"):
         cruda = datos.get(suelta)
         if isinstance(cruda, dict):
             base[suelta]["clave"] = str(cruda.get("clave") or "").strip()
@@ -241,6 +244,7 @@ def adoptar_env():
             datos["openai"].append({"id": f"cta{indice}", "etiqueta": "",
                                     "clave": clave, "activa": True})
     datos["cartesia"]["clave"] = valores.get("CARTESIA_API_KEY", "") or ""
+    datos["kie"]["clave"] = valores.get("KIE_API_KEY", "") or ""
     datos["jamendo"]["clave"] = valores.get("JAMENDO_CLIENT_ID", "") or ""
     datos["freesound"]["clave"] = valores.get("FREESOUND_API_KEY", "") or ""
     return datos
@@ -329,7 +333,7 @@ def _fusionar(actual, peticion):
     # es la que ya habia. Sin eso, editar la de Jamendo borraria la de Cartesia,
     # porque la clave de verdad no baja al navegador NUNCA y la pantalla manda
     # el centinela en su lugar.
-    for suelta in ("cartesia", "jamendo", "freesound"):
+    for suelta in ("cartesia", "kie", "jamendo", "freesound"):
         if suelta in peticion:
             ficha = peticion.get(suelta)
             clave = ficha.get("clave") if isinstance(ficha, dict) else ficha
@@ -469,6 +473,8 @@ def espejar_env(datos=None):
         nuestras[nombre] = cuenta["clave"]
     if datos["cartesia"]["clave"]:
         nuestras["CARTESIA_API_KEY"] = datos["cartesia"]["clave"]
+    if datos["kie"]["clave"]:
+        nuestras["KIE_API_KEY"] = datos["kie"]["clave"]
     if datos["jamendo"]["clave"]:
         nuestras["JAMENDO_CLIENT_ID"] = datos["jamendo"]["clave"]
     if datos["freesound"]["clave"]:
@@ -476,7 +482,7 @@ def espejar_env(datos=None):
 
     # Los nombres que ESTA pantalla escribe. Lo que no este aqui se conserva tal
     # cual y en su orden: un .env puede tener cosas que nadie de aqui gestiona.
-    gestionadas = {"OPENAI_API_KEY", "CARTESIA_API_KEY",
+    gestionadas = {"OPENAI_API_KEY", "CARTESIA_API_KEY", "KIE_API_KEY",
                    "JAMENDO_CLIENT_ID", "FREESOUND_API_KEY"} | {
         f"OPENAI_API_KEY_{i}" for i in range(2, MAX_OPENAI + 1)}
 
@@ -528,6 +534,10 @@ def resumen(datos=None):
         "cartesia": {
             "puesta": bool(datos["cartesia"]["clave"]),
             "cola": tapar(datos["cartesia"]["clave"]),
+        },
+        "kie": {
+            "puesta": bool(datos["kie"]["clave"]),
+            "cola": tapar(datos["kie"]["clave"]),
         },
         "claude_cli": {
             "cuentas": [{
@@ -613,3 +623,8 @@ def apuntar_cuenta_cli(cuenta_id, config_dir=None, entrada=None, etiqueta=None):
 def cartesia():
     """La clave de Cartesia guardada aqui, si la hay."""
     return leer()["cartesia"]["clave"] or ""
+
+
+def kie():
+    """La clave de kie.ai guardada aqui, si la hay."""
+    return leer()["kie"]["clave"] or ""

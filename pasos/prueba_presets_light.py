@@ -134,11 +134,17 @@ def probar_plan():
 
 
 def probar_ritmo():
-    """El deslizador: cinco escalones que de verdad escalan, y sus dos cifras."""
+    """El deslizador: seis escalones que de verdad escalan, y sus dos cifras.
+
+    Eran cinco; el sexto, «documental», es el de los videos largos (planos de
+    siete a doce segundos, ver presets_light.RITMOS) y cumple las mismas reglas.
+    """
     seccion("EL RITMO: UN MANDO QUE RELLENA CINCO CAMPOS")
     import p4_voz
 
-    igual(len(light.RITMOS), 5, "son cinco escalones")
+    igual(len(light.RITMOS), 6, "son seis escalones")
+    igual(light.RITMOS[0]["id"], "documental",
+          "y el mas lento es el documental, el de los videos largos")
     ok(light.RITMO_POR_DEFECTO in light.RITMOS_POR_ID,
        "el de fabrica existe")
 
@@ -151,7 +157,7 @@ def probar_ritmo():
                             (umbrales, "el umbral de rotulos"),
                             (medias, "el plano medio"), (huecos, "el aire")):
         ok(all(a > b for a, b in zip(lista, lista[1:])),
-           f"{etiqueta} baja en los cinco escalones: {lista}")
+           f"{etiqueta} baja en todos los escalones: {lista}")
 
     for ficha in light.RITMOS:
         ok(ficha["min_s"] < ficha["max_s"],

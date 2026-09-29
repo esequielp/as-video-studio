@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "nota": "Los modelos de imagen de kie.ai que sabe llamar motores/imagen_kie/imagen.py. Es DATO y no codigo a proposito: la API de kie.ai es de un intermediario y cambia de nombres, de campos y de precios sin avisar. Todo lo que hay aqui se escribio sin poder abrir docs.kie.ai desde el entorno donde se programo, asi que cada modelo lleva 'verificado': false hasta que la Fase 0 (herramientas/probar_kie.py) lo compruebe contra la cuenta real. Los precios NO viven aqui: viven en tarifas.json (bloque 'kie'), que es la unica tabla de precios del Estudio.",
+  "por_defecto": "google/nano-banana-edit",
+  "sin_referencias": "Cada modelo de edicion necesita al menos una imagen. Para dibujar SIN ninguna (las laminas de un estilo descrito, pasos/moodboard.py) se usa el modelo de 'sin_referencias' de su ficha, con los mismos campos menos el de las referencias.",
+  "modelos": {
+    "google/nano-banana-edit": {
+      "nombre": "Nano Banana (edicion con referencias)",
+      "campo_referencias": "image_urls",
+      "max_referencias": 10,
+      "campo_proporcion": "image_size",
+      "proporciones": {"apaisado": "3:2", "vertical": "2:3", "cuadrado": "1:1"},
+      "campo_resolucion": null,
+      "resoluciones": {},
+      "fijos": {"output_format": "png"},
+      "sin_referencias": "google/nano-banana",
+      "verificado": false
+    },
+    "bytedance/seedream-v4-edit": {
+      "nombre": "Seedream 4 (edicion con referencias)",
+      "campo_referencias": "image_urls",
+      "max_referencias": 10,
+      "campo_proporcion": "image_size",
+      "proporciones": {"apaisado": "landscape_4_3", "vertical": "portrait_4_3", "cuadrado": "square_hd"},
+      "campo_resolucion": "image_resolution",
+      "resoluciones": {"low": "1K", "medium": "2K", "high": "4K"},
+      "fijos": {"max_images": 1},
+      "sin_referencias": "bytedance/seedream-v4-text-to-image",
+      "verificado": false
+    },
+    "nano-banana-pro": {
+      "nombre": "Nano Banana Pro",
+      "campo_referencias": "image_input",
+      "max_referencias": 8,
+      "campo_proporcion": "aspect_ratio",
+      "proporciones": {"apaisado": "3:2", "vertical": "2:3", "cuadrado": "1:1"},
+      "campo_resolucion": "resolution",
+      "resoluciones": {"low": "1K", "medium": "2K", "high": "4K"},
+      "fijos": {"output_format": "png"},
+      "sin_referencias": "nano-banana-pro",
+      "verificado": false
+    }
+  }
+}

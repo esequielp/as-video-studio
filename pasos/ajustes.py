@@ -60,8 +60,17 @@ TAMANO = "1536x1024"
 #: 'imagen'.
 TOKENS_ENTRADA_POR_IMAGEN = 5114
 
+#: Quien genera las imagenes de los videos NUEVOS. Como la calidad, se escribe
+#: en los params de assets al crear el proyecto (`crear_proyecto` en app.py) y
+#: no se lee al generar: un proyecto ya pagado con OpenAI no se pasa solo a
+#: kie.ai porque alguien toque el ajuste.
+MOTORES_IMAGEN = ("openai", "kie")
+
 POR_DEFECTO = {
     "calidad_imagen": "low",
+    "motor_imagen": "openai",
+    # el modelo de kie.ai; vacio = el por defecto de motores/imagen_kie/modelos.json
+    "modelo_imagen": "",
     # Si ya se ha pasado por la guia de inicio (las tarjetas que piden las
     # claves al entrar por primera vez). Vive aqui y no en el navegador
     # porque es de la instalacion, no de la pantalla: desde el movil no hay
@@ -79,6 +88,9 @@ def leer():
             salida[clave] = valor
     if salida.get("calidad_imagen") not in CALIDADES:
         salida["calidad_imagen"] = POR_DEFECTO["calidad_imagen"]
+    if salida.get("motor_imagen") not in MOTORES_IMAGEN:
+        salida["motor_imagen"] = POR_DEFECTO["motor_imagen"]
+    salida["modelo_imagen"] = str(salida.get("modelo_imagen") or "").strip()
     salida["onboarding_visto"] = bool(salida.get("onboarding_visto"))
     return salida
 
@@ -100,6 +112,15 @@ def guardar(cambios):
                 f"calidad {valor!r}: solo {', '.join(CALIDADES)}")
         if clave == "onboarding_visto" and not isinstance(valor, bool):
             raise ValueError("onboarding_visto es verdadero o falso")
+        if clave == "motor_imagen" and valor not in MOTORES_IMAGEN:
+            raise ValueError(
+                f"motor de imagen {valor!r}: solo {', '.join(MOTORES_IMAGEN)}")
+        if clave == "modelo_imagen":
+            valor = str(valor or "").strip()
+            if valor and valor not in modelos_kie():
+                raise ValueError(
+                    f"modelo de kie.ai {valor!r}: los que hay son "
+                    f"{', '.join(modelos_kie()) or 'ninguno'}")
         actual[clave] = valor
     escribir_json(RUTA, actual)
     return actual
@@ -108,6 +129,68 @@ def guardar(cambios):
 def calidad_imagen():
     """La calidad con la que arranca un proyecto nuevo."""
     return leer()["calidad_imagen"]
+
+
+def motor_imagen():
+    """El motor con el que arranca un proyecto nuevo: 'openai' | 'kie'."""
+    return leer()["motor_imagen"]
+
+
+def modelo_imagen():
+    """El modelo de kie.ai con el que arranca un proyecto nuevo ('' = por defecto)."""
+    return leer()["modelo_imagen"]
+
+
+#: La tabla de modelos del motor de kie.ai. Se lee por CONTRATO (una ruta y una
+#: forma), como leen los motores el almacen de claves: importar el motor para
+#: esto arrastraria requests y PIL a la pantalla de ajustes.
+RUTA_MODELOS_KIE = os.path.join(
+    os.environ.get("ESTUDIO_MOTORES") or os.path.join(RAIZ_ESTUDIO, "motores"),
+    "imagen_kie", "modelos.json")
+
+
+def modelos_kie():
+    """{id: nombre} de los modelos de kie.ai que sabe llamar el motor."""
+    tabla = leer_json(RUTA_MODELOS_KIE, {}) or {}
+    return {mid: str((ficha or {}).get("nombre") or mid)
+            for mid, ficha in (tabla.get("modelos") or {}).items()}
+
+
+def params_de_imagen_nuevos():
+    """Lo que se escribe en los params de assets de un proyecto NUEVO. -> dict
+
+    Solo lo que se aparta de lo de siempre: con el ajuste en OpenAI no se escribe
+    ni `motor_imagen` ni `modelo_imagen`, y el proyecto nace exactamente como
+    nacia antes de que existiera kie.ai (regla 1 de CLAUDE.md: un param que el
+    proyecto nunca tuvo mueve su firma).
+    """
+    params = {"calidad": leer()["calidad_imagen"]}
+    params.update(params_de_motor_nuevos())
+    return params
+
+
+def params_de_motor_nuevos():
+    """Solo el MOTOR de un proyecto nuevo, sin la calidad. -> dict (vacio con OpenAI)
+
+    Aparte porque un video del modo light nace con la calidad que trae su
+    ESTILO, y pisarsela con la del ajuste cambiaria lo que el estilo decidio.
+    """
+    ajustes = leer()
+    if ajustes["motor_imagen"] == "openai":
+        return {}
+    params = {"motor_imagen": ajustes["motor_imagen"]}
+    if ajustes["modelo_imagen"]:
+        params["modelo_imagen"] = ajustes["modelo_imagen"]
+    return params
+
+
+def coste_imagen_kie(calidad, modelo=None):
+    """Lo que cuesta UNA imagen de kie.ai: tarifa plana, las referencias no pagan."""
+    tabla = leer_json(RUTA_MODELOS_KIE, {}) or {}
+    modelo = modelo or tabla.get("por_defecto") or ""
+    ficha = (tabla.get("modelos") or {}).get(modelo) or {}
+    resolucion = (ficha.get("resoluciones") or {}).get(calidad)
+    return COSTE.tarifa_kie(modelo, resolucion)
 
 
 def coste_por_imagen(calidad, tamano=TAMANO):

@@ -333,6 +333,17 @@ def aviso_de_idioma(anterior, nuevo, calidad="medium"):
 # ===========================================================================
 
 RITMOS = [
+    # EL DE LOS VIDEOS LARGOS, y el unico que no esta medido: su `media_s` es
+    # una estimacion (la media se pega al minimo, ver arriba) hasta que haya un
+    # video hecho con el. Existe por el coste: a planos de 2,8 s un video de 15
+    # minutos son ~320 imagenes; a 7,5 s, ~120. Por encima del TECHO_S del
+    # segmentador (8 s) la regla de partir en cada punto deja de obligar
+    # --ninguna mitad llega al minimo--, que es justo lo que deja durar un plano.
+    # La camara sobre la imagen quieta (motores/render_video/movimiento.py) es
+    # lo que hace que 10 s de una sola imagen no se lean como un video parado.
+    {"id": "documental", "nombre": "Documental",
+     "min_s": 7.0, "max_s": 12.0, "min_s_rotulos": 8.0, "media_s": 7.5,
+     "velocidad": "normal", "hueco_minimo": 1.6, "estimado": True},
     {"id": "muy_lento", "nombre": "Muy lento",
      "min_s": 6.0, "max_s": 9.0, "min_s_rotulos": 7.5, "media_s": 6.3,
      "velocidad": "slow", "hueco_minimo": 1.4},
@@ -386,16 +397,20 @@ def ritmo_de(id_ritmo):
 USD_POR_IMAGEN = {"low": 0.033, "medium": 0.074, "high": 0.198}
 
 
-def coste_por_minuto(id_ritmo, calidad="low"):
+def coste_por_minuto(id_ritmo, calidad="low", usd_por_imagen=None):
     """Lo que cuesta un minuto de video a este ritmo. -> USD
 
     Es la unica cifra de dinero que este modo ensena, y por eso vale la pena
     decir de que esta hecha: un minuto son 60/media_s planos, y cada plano una
     imagen. No incluye lo que se paga UNA vez por estilo (las referencias
     dibujadas y las muestras): eso ya se dice al crearlo.
+
+    `usd_por_imagen` lo pasa quien sabe con que motor se va a generar (kie.ai
+    cobra una tarifa plana); sin el, la tabla medida de OpenAI.
     """
     ficha = ritmo_de(id_ritmo)
-    por_imagen = USD_POR_IMAGEN.get(str(calidad or "low"), USD_POR_IMAGEN["low"])
+    por_imagen = (float(usd_por_imagen) if usd_por_imagen is not None
+                  else USD_POR_IMAGEN.get(str(calidad or "low"), USD_POR_IMAGEN["low"]))
     return round((60.0 / max(0.5, float(ficha["media_s"]))) * por_imagen, 3)
 
 
@@ -445,10 +460,10 @@ def contexto_de_ritmo(id_ritmo):
             f"media (ritmo «{ficha['nombre'].lower()}»).")
 
 
-def ficha_de_ritmo(id_ritmo, calidad="low"):
+def ficha_de_ritmo(id_ritmo, calidad="low", usd_por_imagen=None):
     """El ritmo tal y como lo ensena la pantalla: solo dos cifras."""
     ficha = dict(ritmo_de(id_ritmo))
-    ficha["usd_por_minuto"] = coste_por_minuto(ficha["id"], calidad)
+    ficha["usd_por_minuto"] = coste_por_minuto(ficha["id"], calidad, usd_por_imagen)
     return ficha
 
 class ErrorEncargo(ValueError):

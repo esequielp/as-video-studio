@@ -9,6 +9,7 @@ Aqui cada proveedor tiene su prueba, elegida para que NO cueste dinero:
 
     openai     GET /v1/models              autentica; no genera nada
     cartesia   GET /voices                 lista voces; no sintetiza nada
+    kie        GET /api/v1/chat/credit     el saldo en creditos; no genera nada
     jamendo    GET /tracks/?limit=1        una busqueda; el plan es gratuito
     freesound  GET /search/text/?page_size=1   idem
     claude     salud_cli.probar por cuenta  (haiku, una palabra: es lo minimo)
@@ -136,6 +137,57 @@ def probar_cartesia(clave):
                                      f"{_texto_corto(respuesta)}")
 
 
+#: El endpoint de saldo de kie.ai. El mismo que usa `motores/imagen_kie`; se
+#: puede mover con ESTUDIO_KIE_API como el del motor.
+URL_SALDO_KIE = ((os.environ.get("ESTUDIO_KIE_API") or "https://api.kie.ai").rstrip("/")
+                 + "/api/v1/chat/credit")
+
+
+def probar_kie(clave):
+    """La clave de kie.ai contra su endpoint de SALDO: autentica y dice cuanto queda.
+
+    A diferencia de OpenAI, aqui el saldo SI se puede saber sin pagar nada, y es
+    lo mas util que se puede ensenar: una clave buena sin creditos para a mitad
+    de una tanda igual que una clave mala.
+    """
+    if not clave:
+        return _ficha("kie", "sin_clave", "no hay clave de kie.ai puesta (solo hace "
+                                          "falta si generas las imagenes con kie.ai)")
+    respuesta, fallo = _pedir("GET", URL_SALDO_KIE,
+                              headers={"Authorization": f"Bearer {clave}"})
+    if respuesta is None:
+        return _ficha("kie", "sin_red", f"no se ha podido hablar con kie.ai: {fallo}")
+    try:
+        cuerpo = respuesta.json()
+    except ValueError:
+        cuerpo = {}
+    cuerpo = cuerpo if isinstance(cuerpo, dict) else {}
+    # kie.ai contesta casi siempre HTTP 200 y pone el resultado en `code`
+    codigo = respuesta.status_code
+    if codigo == 200:
+        try:
+            codigo = int(cuerpo.get("code", 200))
+        except (TypeError, ValueError):
+            codigo = 200
+    mensaje = str(cuerpo.get("msg") or _texto_corto(respuesta))
+    if codigo == 200:
+        try:
+            creditos = float(cuerpo.get("data") or 0.0)
+        except (TypeError, ValueError):
+            creditos = None
+        if creditos is None:
+            return _ficha("kie", "ok", "la clave autentica")
+        if creditos <= 0:
+            return _ficha("kie", "mal", "la clave autentica pero la cuenta no tiene "
+                                        "creditos: recarga en kie.ai", creditos=creditos)
+        return _ficha("kie", "ok", f"la clave autentica y quedan {creditos:g} creditos",
+                      creditos=creditos)
+    if codigo == 401:
+        return _ficha("kie", "mal", "kie.ai no reconoce la clave (401): esta mal "
+                                    "copiada o es de otra cuenta")
+    return _ficha("kie", "mal", f"kie.ai contesta {codigo}: {mensaje[:300]}")
+
+
 def probar_jamendo(clave):
     if not clave:
         return _ficha("jamendo", "sin_clave", "no hay Client ID de Jamendo; el video "
@@ -202,6 +254,7 @@ def probar_todas(cuentas_claude=(), con_claude=True):
     if salud_cli.simulado():
         for proveedor, puesta in (("openai", bool(almacen["openai"])),
                                   ("cartesia", bool(almacen["cartesia"]["clave"])),
+                                  ("kie", bool(almacen["kie"]["clave"])),
                                   ("jamendo", bool(almacen["jamendo"]["clave"])),
                                   ("freesound", bool(almacen["freesound"]["clave"]))):
             fichas.append(_ficha(proveedor, "ok" if puesta else "sin_clave",
@@ -212,6 +265,7 @@ def probar_todas(cuentas_claude=(), con_claude=True):
     pruebas = (
         (probar_openai, (almacen["openai"][0]["clave"] if almacen["openai"] else "")),
         (probar_cartesia, almacen["cartesia"]["clave"]),
+        (probar_kie, almacen["kie"]["clave"]),
         (probar_jamendo, almacen["jamendo"]["clave"]),
         (probar_freesound, almacen["freesound"]["clave"]),
     )
@@ -232,6 +286,7 @@ def probar_todas(cuentas_claude=(), con_claude=True):
 
 
 NOMBRES = {"openai": "OpenAI (imágenes)", "cartesia": "Cartesia (voz)",
+           "kie": "kie.ai (imágenes)",
            "jamendo": "Jamendo (música)", "freesound": "FreeSound (efectos)",
            "claude": "Claude"}
 

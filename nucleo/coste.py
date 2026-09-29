@@ -63,9 +63,10 @@ RUTA_GLOBAL = (os.environ.get("ESTUDIO_COSTE_GLOBAL")
                or os.path.join(RAIZ_ESTUDIO, "coste_global.jsonl"))
 NOMBRE_COSTE = "coste.jsonl"
 
-PROVEEDORES = ("openai", "tts", "claude_cli")
+PROVEEDORES = ("openai", "tts", "claude_cli", "kie")
 SIN_DOLARES = ("claude_cli",)            # se miden en tokens y no suman al total
-ETIQUETAS = {"openai": "OpenAI", "tts": "TTS", "claude_cli": "Claude"}
+ETIQUETAS = {"openai": "OpenAI", "tts": "TTS", "claude_cli": "Claude",
+             "kie": "kie.ai"}
 
 AVISO_PRESUPUESTO = 0.8                  # fraccion a partir de la cual se avisa
 
@@ -205,6 +206,24 @@ def coste_openai(usage, tamano, calidad, imagenes=1):
         "salida": salida,
         "sin_desglosar": sin_desglosar,
     }
+
+
+def tarifa_kie(modelo, resolucion=None):
+    """USD de UNA imagen de kie.ai de ese modelo (y resolucion), o None.
+
+    kie.ai cobra en creditos por imagen, lleve las referencias que lleve: no hay
+    tokens de entrada que sumar, y ese es todo su ahorro frente a gpt-image-2.
+    Un modelo cuyo precio depende de la resolucion trae un dict {1K: n, ...}.
+    """
+    tabla = tarifas().get("kie") or {}
+    por_credito = _numero(tabla.get("usd_por_credito"))
+    creditos = (tabla.get("creditos_por_imagen") or {}).get(str(modelo or ""))
+    if isinstance(creditos, dict):
+        creditos = creditos.get(str(resolucion or ""))
+    creditos = _numero(creditos)
+    if por_credito is None or creditos is None:
+        return None
+    return round(creditos * por_credito, 6)
 
 
 # -------------------------------------------------------------------- eventos
@@ -425,12 +444,19 @@ def cabecera(proveedores, total_usd):
     abierto = proveedores.get("openai") or _vacio("openai")
     voz = proveedores.get("tts") or _vacio("tts")
     cli = proveedores.get("claude_cli") or _vacio("claude_cli")
-    return "     ".join([
+    kie = proveedores.get("kie") or _vacio("kie")
+    partes = [
         f"OpenAI  {importe(abierto)} · {corto(abierto['tokens']['total'])} tok",
         f"TTS  {importe(voz)} · {corto(voz['cantidad']['caracteres'])} car",
         f"Claude  {corto(cli['tokens']['total'])} tok",
-        f"TOTAL  ${total_usd:.2f}",
-    ])
+    ]
+    # kie.ai solo aparece cuando se ha usado: un proyecto que genera con OpenAI
+    # sigue viendo exactamente la linea de siempre
+    if kie["eventos"]:
+        partes.insert(1, f"kie.ai  {importe(kie)} · "
+                         f"{corto(kie['cantidad']['imagenes'])} img")
+    partes.append(f"TOTAL  ${total_usd:.2f}")
+    return "     ".join(partes)
 
 
 def agregar(registros):
@@ -606,6 +632,18 @@ def reportar_openai(usage, calidad, tamano, imagenes=1, operacion="imagen",
                    usd_estimado=True, detalle=ficha)
 
 
+def reportar_kie(modelo, resolucion=None, imagenes=1, operacion="imagen",
+                 unidad=None, detalle=None):
+    """Anota una imagen de kie.ai: sin tokens, con la tarifa plana del modelo."""
+    precio = tarifa_kie(modelo, resolucion)
+    ficha = {"modelo": modelo, "resolucion": resolucion}
+    ficha.update(detalle or {})
+    return _anotar("kie", operacion, unidad=unidad,
+                   cantidad={"imagenes": imagenes},
+                   usd=None if precio is None else precio * int(imagenes),
+                   usd_estimado=True, detalle=ficha)
+
+
 def reportar_tts(caracteres, operacion="sintesis", unidad=None, tokens=None,
                  detalle=None):
     """Anota una sintesis con los caracteres que el motor de voz envio de verdad."""
@@ -750,6 +788,20 @@ def _medir_imagen(original):
         meta = meta if isinstance(meta, dict) else {}
         calidad = kwargs.get("quality") or meta.get("quality") or "low"
         tamano = meta.get("tamano") or kwargs.get("tamano") or "apaisado"
+        if meta.get("proveedor") == "kie":
+            # el motor de kie.ai tiene el mismo contrato y se engancha por el
+            # mismo sitio (`generar`), pero cobra por imagen y no por tokens:
+            # tarifarlo como OpenAI apuntaria un gasto que nadie ha hecho
+            registro = reportar_kie(meta.get("modelo"), meta.get("resolucion"),
+                                    detalle={"calidad": calidad,
+                                             "tamano": tamano,
+                                             "refs": meta.get("refs"),
+                                             "tarea": meta.get("tarea"),
+                                             "segundos": meta.get("segundos")})
+            if isinstance(registro, dict) and registro.get("usd") is not None:
+                meta["coste"] = float(registro["usd"])
+                meta["coste_estimado"] = bool(registro.get("usd_estimado"))
+            return png, meta
         registro = reportar_openai(meta.get("usage"), calidad, tamano,
                                    detalle={"modelo": meta.get("modelo"),
                                             "refs": meta.get("refs"),
@@ -847,6 +899,10 @@ def instrumentar(pasos=None):
     if conservar is not None:
         _envolver(conservar, "_llamar_claude", _medir_claude("conservacion"),
                   informe, "conservacion.claude")
+    publicacion = getattr(pasos, "publicacion", None)
+    if publicacion is not None:
+        _envolver(publicacion, "_llamar_claude", _medir_claude("publicacion"),
+                  informe, "publicacion.claude")
     assets = getattr(pasos, "p6_assets", None)
     if assets is not None:
         _envolver(assets, "_producir_imagen", _medir_produccion_imagen, informe,
@@ -904,16 +960,19 @@ def modulos_de_imagen(pasos=None):
     for medios in candidatos:
         if medios is None or not hasattr(medios, "motor"):
             continue
-        try:
-            modulo = medios.motor("imagen_openai/imagen.py")
-        except Exception:  # noqa: BLE001
-            continue
-        if modulo not in modulos:
-            modulos.append(modulo)
+        # los DOS motores de imagen: el de kie.ai tiene el mismo contrato y su
+        # gasto tambien pasa por `generar`
+        for clave in ("imagen_openai/imagen.py", "imagen_kie/imagen.py"):
+            try:
+                modulo = medios.motor(clave)
+            except Exception:  # noqa: BLE001
+                continue
+            if modulo not in modulos:
+                modulos.append(modulo)
     for modulo in list(sys.modules.values()):
-        fichero = getattr(modulo, "__file__", "") or ""
+        fichero = (getattr(modulo, "__file__", "") or "").replace("/", os.sep)
         if os.path.basename(fichero).lower() == "imagen.py" and \
-                "imagen_openai" in fichero.replace("/", os.sep) and \
+                ("imagen_openai" in fichero or "imagen_kie" in fichero) and \
                 modulo not in modulos:
             modulos.append(modulo)
     return modulos

@@ -875,9 +875,10 @@ def crear_proyecto(cuerpo: dict = Body(default=None)):
     # que nunca la fijaron en cuanto alguien tocara el ajuste -- `calidad` entra
     # en la firma de cada imagen --, y eso es dinero. Escrita aqui, lo viejo se
     # queda como estaba y esto es solo el punto de partida del proyecto nuevo.
+    # Y EL MOTOR, con la misma regla: solo se escribe si el ajuste se aparta de
+    # OpenAI (ver `ajustes.params_de_imagen_nuevos`).
     try:
-        ctx.estado.actualizar_params("assets",
-                                     {"calidad": AJUSTES.calidad_imagen()})
+        ctx.estado.actualizar_params("assets", AJUSTES.params_de_imagen_nuevos())
     except Exception:  # noqa: BLE001
         # un ajuste ilegible no puede impedir crear un proyecto: se queda con
         # el valor por defecto del paso, que es el que habia antes de todo esto
@@ -1997,6 +1998,22 @@ def regrabar_seccion(pid: str, seccion_id: str, cuerpo: dict = Body(default=None
 # justamente el caso del modo light.
 # ==========================================================================
 
+def _usd_por_imagen(calidad, motor="openai", modelo=None):
+    """Lo que cuesta un plano con ese motor, referencias incluidas. -> USD
+
+    Con OpenAI es la tabla medida de `presets_light` (la imagen MAS las
+    referencias, que alli son lo caro). Con kie.ai es su tarifa plana: las
+    referencias no se pagan. Si a kie.ai le falta la tarifa se cae a la de
+    OpenAI, que es mas cara: mejor pasarse que prometer barato.
+    """
+    light = PASOS_MODULOS.presets_light
+    if motor == "kie":
+        precio = AJUSTES.coste_imagen_kie(calidad, modelo or None)
+        if precio is not None:
+            return precio
+    return light.USD_POR_IMAGEN.get(calidad, light.USD_POR_IMAGEN["low"])
+
+
 @app.post("/api/estimacion")
 def estimar_video(cuerpo: dict = Body(default=None)):
     """Lo que va a salir de esa duracion: palabras, planos y dolares."""
@@ -2046,7 +2063,11 @@ def estimar_video(cuerpo: dict = Body(default=None)):
     planos = max(1, int(round(segundos / media)))
 
     calidad = str(datos.get("calidad") or "low").lower()
-    usd_imagen = light.USD_POR_IMAGEN.get(calidad, light.USD_POR_IMAGEN["low"])
+    # sin proyecto todavia, el motor es el que tendra el proyecto al crearse: el
+    # del ajuste, salvo que la pantalla pregunte por otro
+    motor = str(datos.get("motor_imagen") or AJUSTES.motor_imagen())
+    usd_imagen = _usd_por_imagen(calidad, motor,
+                                 datos.get("modelo_imagen") or AJUSTES.modelo_imagen())
 
     imagenes = max(1, planos)
 
@@ -5365,10 +5386,18 @@ def leer_ajustes():
     que hace que la eleccion se pueda tomar: elegir calidad mirando solo el
     precio de la imagen devuelta es elegir mirando la parte pequena.
     """
-    return {"ajustes": AJUSTES.leer(),
+    guardados = AJUSTES.leer()
+    return {"ajustes": guardados,
             "calidades": list(AJUSTES.CALIDADES),
             "costes": AJUSTES.tabla_de_costes(),
-            "tamano": AJUSTES.TAMANO}
+            "tamano": AJUSTES.TAMANO,
+            # el otro proveedor de imagen: que modelos hay y lo que cuesta una
+            # imagen en cada calidad con el elegido (tarifa plana, sin tokens)
+            "motores_imagen": list(AJUSTES.MOTORES_IMAGEN),
+            "modelos_kie": AJUSTES.modelos_kie(),
+            "costes_kie": {c: AJUSTES.coste_imagen_kie(
+                               c, guardados["modelo_imagen"] or None)
+                           for c in AJUSTES.CALIDADES}}
 
 
 @app.put("/api/ajustes")
@@ -5838,6 +5867,15 @@ def _impedimentos(ctx, pestana, pendientes):
             fuera.append({"tarea": "escenarios",
                           "que": "no hay guion todavía: sin él no hay nada que leer",
                           "donde": "la pestaña Guion"})
+    # UN VIDEO DE KIE.AI SIN SU CLAVE se dice aqui, antes de lanzar: dentro de
+    # la tanda saldria despues de haber pagado la voz y el reparto.
+    if ({"piezas", "assets"} & ids
+            and (ctx.estado.params("assets") or {}).get("motor_imagen") == "kie"
+            and not (os.environ.get("KIE_API_KEY") or _claves().kie())):
+        fuera.append({"tarea": "assets",
+                      "que": "este vídeo genera las imágenes con kie.ai y no hay "
+                             "clave de kie.ai puesta",
+                      "donde": "Configuración → kie.ai"})
     return fuera
 
 
@@ -6384,7 +6422,10 @@ def _foto_para_asistente(pid, pantalla=None):
     try:
         ajustes = AJUSTES.leer()
         lineas.append(f"ajustes: calidad de imagen para los videos nuevos = "
-                      f"{ajustes['calidad_imagen']}; guia de inicio vista = "
+                      f"{ajustes['calidad_imagen']}; motor de imagen para los "
+                      f"videos nuevos = {ajustes['motor_imagen']}"
+                      f"{' (' + ajustes['modelo_imagen'] + ')' if ajustes['modelo_imagen'] else ''}"
+                      f"; guia de inicio vista = "
                       f"{'si' if ajustes.get('onboarding_visto') else 'no'}")
     except Exception as fallo:  # noqa: BLE001
         lineas.append(f"ajustes: no se han podido leer ({fallo})")
@@ -7723,7 +7764,14 @@ def listar_presets_light():
             "max_imagenes_estilo": light.max_imagenes_estilo(),
             # El deslizador de ritmo, con las dos unicas cifras que ensena: el
             # plano medio y lo que cuesta un minuto de video a ese ritmo.
-            "ritmos": [light.ficha_de_ritmo(r["id"]) for r in light.RITMOS],
+            # Con el motor y la calidad que tendra un video NUEVO: con kie.ai el
+            # minuto cuesta su tarifa plana, no la de OpenAI con referencias.
+            "ritmos": [light.ficha_de_ritmo(
+                           r["id"], AJUSTES.calidad_imagen(),
+                           _usd_por_imagen(AJUSTES.calidad_imagen(),
+                                           AJUSTES.motor_imagen(),
+                                           AJUSTES.modelo_imagen()))
+                       for r in light.RITMOS],
             "ritmo_por_defecto": light.RITMO_POR_DEFECTO,
             "sueltos": _talleres_sueltos(),
             "tareas": [{"id": t["id"], "nombre": t["nombre"],
@@ -8333,6 +8381,15 @@ TANDAS_LIGHT = [
     # listo, lo unico que corre es lo que se quedo viejo.
     {"id": "render", "nombre": "El MP4", "pestanas": ["video", "render"],
      "porque": "pone al día los rótulos si hace falta y monta el vídeo"},
+    # LA FABRICA SUPERVISADA: todo lo que va DESPUES del guion, de una tirada y
+    # sin paradas. La unica revision obligatoria es la del guion, que es lo
+    # unico que se genera antes de gastar dinero de verdad (voz e imagenes); lo
+    # que salga mal despues se rehace suelto, plano a plano, y las firmas hacen
+    # que no se vuelva a pagar lo demas. No es un camino nuevo: son las tres
+    # tandas de arriba en un solo trabajo, con el mismo modo «pendientes».
+    {"id": "produccion", "nombre": "El vídeo entero",
+     "pestanas": ["voz", "video", "render"],
+     "porque": "graba la voz, dibuja las imágenes y monta el vídeo sin paradas"},
 ]
 TANDAS_LIGHT_POR_ID = {t["id"]: t for t in TANDAS_LIGHT}
 
@@ -8476,11 +8533,12 @@ def _coste_previsto(ctx, pestanas):
     caras del Estudio son las IMAGENES (una por plano) y el TTS (por caracter);
     todo lo que llama al CLI va por la suscripcion y no entra aqui.
     """
-    light = PASOS_MODULOS.presets_light
     planos = _planos_previstos(ctx)
     assets = ctx.estado.params("assets") or {}
     calidad = str(assets.get("calidad") or "low").lower()
-    usd_imagen = light.USD_POR_IMAGEN.get(calidad, light.USD_POR_IMAGEN["low"])
+    # el motor DEL PROYECTO, el que se escribio al crearlo; sin el, OpenAI
+    usd_imagen = _usd_por_imagen(calidad, assets.get("motor_imagen") or "openai",
+                                 assets.get("modelo_imagen"))
     tarifas = COSTE.tarifas()
     usd_caracter = float(((tarifas.get("tts") or {}).get("usd_por_caracter")) or 0.0)
 
@@ -8723,7 +8781,7 @@ def _correr_cadena(avisar, ctx, pestanas, modo, datos, plan):
 def _pestanas_pedidas(datos):
     """Las pestanas de una peticion de generacion, validadas y en orden.
 
-    Acepta `tanda` (guion|voz|video, las tres del modo light) o `pestanas` (la
+    Acepta `tanda` (guion|voz|video|render|produccion, las del modo light) o `pestanas` (la
     lista cruda, que es lo que usa la tirada de punta a punta). Sin nada, las
     cinco: eso es PENDIENTE 28.
     """
@@ -8916,6 +8974,66 @@ def generar_video(pid: str, cuerpo: dict = Body(default=None)):
             "eventos": f"/api/trabajos/{trabajo_id}/eventos"}
 
 
+# ==========================================================================
+# LA FICHA DE PUBLICACION (pasos/publicacion.py)
+#
+# Titulo, descripcion, capitulos y etiquetas para subir el video a YouTube. No
+# es un paso del grafo: lee el guion y la voz que ya hay y escribe
+# `publicacion.json` en la carpeta del proyecto. Va como TRABAJO y no como una
+# peticion larga por lo mismo que el asistente: detras del proxy una peticion de
+# un minuto se corta a los sesenta segundos.
+# ==========================================================================
+
+NOMBRE_TRABAJO_PUBLICACION = "publicacion"
+
+
+def _correr_publicacion(avisar, ctx):
+    # sin paso: la ficha no es de ninguno, y lo que gaste el CLI (solo tokens,
+    # va contra la suscripcion) se apunta en el proyecto como «sin paso»
+    with COSTE.contexto(ctx.proyecto, None):
+        return PASOS_MODULOS.publicacion.generar(ctx.proyecto, avisar)
+
+
+def _trabajo_de_publicacion(ctx):
+    for ficha in ctx.gestor.listar(activos=True):
+        if ficha.get("nombre") == NOMBRE_TRABAJO_PUBLICACION:
+            return ficha
+    return None
+
+
+@app.get("/api/proyectos/{pid}/publicacion")
+def leer_publicacion(pid: str):
+    """La ficha para subir a YouTube, si ya se escribio. -> {ficha, texto, trabajo}"""
+    if PASOS_MODULOS is None:
+        raise ErrorApi(503, f"los pasos no se han podido cargar: {ERROR_PASOS}")
+    ctx = contexto(pid)
+    publicacion = PASOS_MODULOS.publicacion
+    ficha = publicacion.leer(ctx.proyecto)
+    return {"ficha": ficha,
+            "texto": publicacion.texto_de(ficha) if ficha else "",
+            "trabajo": _trabajo_de_publicacion(ctx) or {}}
+
+
+@app.post("/api/proyectos/{pid}/publicacion", status_code=202)
+def escribir_publicacion(pid: str):
+    """Escribe (o reescribe) la ficha de publicacion en segundo plano. -> trabajo"""
+    if PASOS_MODULOS is None:
+        raise ErrorApi(503, f"los pasos no se han podido cargar: {ERROR_PASOS}")
+    ctx = contexto(pid)
+    if not ctx.proyecto.version_activa("guion"):
+        raise ErrorApi(409, "no hay guion todavía: la ficha se escribe a partir de él")
+    activo = _trabajo_de_publicacion(ctx)
+    if activo is not None:
+        raise ErrorApi(409, "la ficha de publicación ya se está escribiendo",
+                       {"trabajo_id": activo["id"]})
+    trabajo_id = ctx.gestor.lanzar(NOMBRE_TRABAJO_PUBLICACION,
+                                   _correr_publicacion, ctx)
+    _registrar_trabajo(trabajo_id, ctx.id)
+    ctx.bitacora.anotar("publicacion_lanzada", None, {"trabajo": trabajo_id})
+    return {"trabajo_id": trabajo_id, "trabajo": ctx.gestor.estado(trabajo_id),
+            "eventos": f"/api/trabajos/{trabajo_id}/eventos"}
+
+
 @app.post("/api/presets-light/{preset_id}/video", status_code=201)
 def crear_video_light(preset_id: str, cuerpo: dict = Body(default=None)):
     """Un proyecto de video nuevo con ese estilo ya aplicado. -> la ficha.
@@ -8970,6 +9088,11 @@ def crear_video_light(preset_id: str, cuerpo: dict = Body(default=None)):
     # camino que copiara las claves a mano se quedaria viejo el dia que un
     # preset guarde una mas.
     aplicado = aplicar_preset_canal(proyecto.id, preset_id)
+    # EL MOTOR DE IMAGEN, al nacer y solo si el ajuste se aparta de OpenAI: la
+    # misma regla que `crear_proyecto` (la calidad no, que la trae el estilo).
+    motor = AJUSTES.params_de_motor_nuevos()
+    if motor:
+        ctx.estado.actualizar_params("assets", motor)
     avisos = _sembrar_video_light(ctx, datos)
     ctx.bitacora.anotar("video_light_creado", None, {
         "preset": preset_id, "estilo": ficha_preset.get("nombre"),

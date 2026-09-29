@@ -129,7 +129,10 @@ PARAMS_POR_DEFECTO = {
     # persona; a partir de ahi es un dato. QUE PLANTILLAS puede usar vive en los
     # params de rotulos, junto al resto del grafismo.
     "semilla": 7,
-    "motor_imagen": "openai",          # openai | adoptar
+    # openai | kie | adoptar. `kie` va con `modelo_imagen` (vacio = el por
+    # defecto de motores/imagen_kie/modelos.json). Ninguno de los dos se lee de
+    # un ajuste al generar: se escriben al CREAR el proyecto, como `calidad`.
+    "motor_imagen": "openai",
     "imagenes_previas": [],            # carpetas de arte ya aprobado
     # Fotogramas REALES del video de referencia, aprobados a mano, para que el
     # dibujo de una persona o un sitio concreto se parezca al original. Vacio en
@@ -173,8 +176,13 @@ def describir(params):
     """Frase corta con lo que hara el paso con estos parametros."""
     p = _con_defectos(params)
     catalogo = p["catalogo"] or {}
-    motor = ("adoptando arte ya existente" if p["motor_imagen"] == "adoptar"
-             else f"generando con gpt-image-2 en calidad {p['calidad']}")
+    if p["motor_imagen"] == "adoptar":
+        motor = "adoptando arte ya existente"
+    elif _usa_kie(p):
+        motor = (f"generando con kie.ai ({_modelo_kie(p) or 'modelo por defecto'}) "
+                 f"en calidad {p['calidad']}")
+    else:
+        motor = f"generando con gpt-image-2 en calidad {p['calidad']}"
     encuadre = ("asigna a cada plano su clase de encuadre en texto "
                 "(caben diagramas y pantallas)")
     return (f"Corta la narracion en planos de {p['min_s']:.0f}-{p['max_s']:.0f} s, "
@@ -2932,6 +2940,93 @@ def _adoptar(nombre, p, firma=None, subcarpetas=("", "escenas", "storyboard", "r
     return None
 
 
+#: Los motores que GENERAN, por el valor de `motor_imagen`. `adoptar` no genera:
+#: si llega hasta aqui sin arte previo, levanta antes (ver _producir_imagen).
+MOTORES_DE_IMAGEN = {"openai": "imagen_openai/imagen.py",
+                     "kie": "imagen_kie/imagen.py"}
+
+
+def _usa_kie(p):
+    return (p or {}).get("motor_imagen") == "kie"
+
+
+def _modelo_kie(p):
+    """El modelo de kie.ai del proyecto; vacio = el por defecto del motor."""
+    return str((p or {}).get("modelo_imagen") or "").strip() or None
+
+
+def _motor_generador(p):
+    """El motor que paga la imagen: kie.ai si el proyecto lo eligio, si no OpenAI.
+
+    Solo decide QUIEN GENERA. Las referencias se siguen preparando con
+    `imagen_openai.normalizar` en todos los casos: un PNG RGBA de 1024 como
+    mucho vale igual para los dos proveedores, y tener dos caches de
+    referencias para lo mismo es como se acaba con dos laminas distintas.
+    """
+    clave = "kie" if _usa_kie(p) else "openai"
+    return medios.motor(MOTORES_DE_IMAGEN[clave])
+
+
+def _huella_de_imagen(prompt, referencias, p, tamano):
+    """Lo que identifica una imagen en la cache del banco. -> dict para huella.
+
+    EL MOTOR SOLO ENTRA SI NO ES EL DE SIEMPRE, y es lo mismo que se hace con el
+    tamano: la huella serializa tambien las claves que valen None, asi que
+    anadir {"motor": None} a todas cambiaria la firma de cada imagen de cada
+    proyecto ya pagado y la cache dejaria de acertar. Con la clave solo en los
+    proyectos de kie.ai, lo viejo no se entera, y una imagen de Nano Banana no
+    se confunde nunca con una de gpt-image-2 hecha con el mismo prompt.
+    """
+    datos = {"prompt": prompt, "calidad": p["calidad"],
+             # el tamano entra en la firma: la misma escena en vertical es otra
+             # imagen, y la cache no puede devolver la apaisada
+             "tamano": tamano if tamano != "apaisado" else None,
+             "refs": [medios.huella_fichero(r) for r in referencias]}
+    if _usa_kie(p):
+        datos["motor"] = "kie"
+        datos["modelo"] = _modelo_kie(p) or ""
+    return datos
+
+
+#: Que referencias se sueltan primero cuando el motor admite menos de las que
+#: lleva el plano, de la que menos pierde a la que mas. La lamina de estilo, la
+#: imagen rechazada y las adjuntas de la nota NO estan: sin la lamina el plano
+#: sale en otro estilo, y sin las de la nota se rehace sin la correccion.
+ORDEN_DE_RECORTE = ("parecido", "continuidad", "estilo", "reparto")
+
+
+def _referencias_para_el_motor(referencias, p):
+    """Las referencias que caben en el motor del proyecto, en su orden. -> lista
+
+    Con OpenAI no se toca nada: la lista sale identica, y con ella el prompt y la
+    firma de cada imagen. kie.ai admite menos por llamada (`max_referencias` de
+    cada modelo), y el recorte se hace AQUI y no en el motor porque aqui se sabe
+    que papel tiene cada una, y porque el prompt se escribe DESPUES a partir de
+    esta lista: las cita por posicion, asi que tiene que ver la lista ya
+    recortada o hablaria de una imagen que no va.
+
+    Se suelta primero lo que menos pierde (ORDEN_DE_RECORTE) y, dentro de un
+    papel, la ultima: la continuidad mas lejana, la hoja de reparto que se anadio
+    por la nota. La primera de estilo no se suelta nunca.
+    """
+    if not _usa_kie(p) or not referencias:
+        return referencias
+    try:
+        maximo = int(_motor_generador(p).max_referencias(_modelo_kie(p)))
+    except Exception:                                    # noqa: BLE001
+        return referencias
+    quedan = list(referencias)
+    for papel in ORDEN_DE_RECORTE:
+        while len(quedan) > maximo:
+            indices = [i for i, r in enumerate(quedan) if r.get("papel") == papel]
+            if papel == "estilo":
+                indices = indices[1:]
+            if not indices:
+                break
+            quedan.pop(indices[-1])
+    return quedan
+
+
 def _producir_imagen(nombre, prompt, referencias, destino, p, rehacer=False,
                      tamano=None):
     """Arte adoptado -> cache -> API. Devuelve como se resolvio y el coste.
@@ -2945,12 +3040,7 @@ def _producir_imagen(nombre, prompt, referencias, destino, p, rehacer=False,
     apaisadas, que es como se leen mejor como referencia.
     """
     tamano = tamano or "apaisado"
-    firma = medios.huella({"prompt": prompt, "calidad": p["calidad"],
-                           # el tamano entra en la firma: la misma escena en
-                           # vertical es otra imagen, y la cache no puede
-                           # devolver la apaisada
-                           "tamano": tamano if tamano != "apaisado" else None,
-                           "refs": [medios.huella_fichero(r) for r in referencias]})
+    firma = medios.huella(_huella_de_imagen(prompt, referencias, p, tamano))
     cacheada = os.path.join(p["banco_imagenes"], f"{firma}.png")
     # En el modo explicito 'adoptar' el objetivo es no gastar, asi que se acepta
     # arte que solo coincide en nombre. El guardian de planos repetidos sigue
@@ -2973,10 +3063,11 @@ def _producir_imagen(nombre, prompt, referencias, destino, p, rehacer=False,
             medios.copiar(cacheada, destino)
             return {"origen": "cache", "firma": firma, "coste": 0.0}
 
-    imagen = medios.motor("imagen_openai/imagen.py")
+    imagen = _motor_generador(p)
+    extra = {"modelo": _modelo_kie(p)} if _usa_kie(p) else {}
     try:
         png, meta = imagen.generar(prompt, referencias, quality=p["calidad"],
-                                   tamano=tamano)
+                                   tamano=tamano, **extra)
     except SystemExit as fallo:
         # el motor esta escrito como CLI y aborta con SystemExit (por ejemplo si
         # falta la clave); dentro de un hilo eso no lo captura nadie y el paso
@@ -3369,6 +3460,9 @@ def _generar_escenas(plan, dirs, p, trabajo, toca, unidades, resultados, avisar,
                         + [dict(r, ruta=motor_imagen.normalizar(r["ruta"],
                                                                 dirs["cache"]))
                            for r in corregido["referencias"]])
+                # ANTES del prompt: lo escribe a partir de esta lista y cita
+                # cada referencia por su posicion. Con OpenAI no cambia nada.
+                referencias = _referencias_para_el_motor(referencias, p)
                 prompt = _prompt_completo(
                     escena_final, referencias, p["estilo"],
                     feedback=nota_texto,

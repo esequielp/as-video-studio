@@ -71,6 +71,27 @@ import medios
 PASO = "moodboard"
 PROPUESTAS = "_propuestas"
 
+
+def _motor_que_dibuja():
+    """El motor que paga las laminas, y lo que hay que pasarle. -> (modulo, kwargs)
+
+    Las laminas son del ESTILO, no de un video, asi que no hay params de
+    proyecto que mirar: manda el ajuste de la instalacion (`ajustes.motor_imagen`).
+    Leerlo aqui, al dibujar, no mueve ninguna firma -- un estilo no tiene --, y
+    es lo que hace que quien solo tiene la clave de kie.ai pueda crear un estilo.
+    Con el ajuste en OpenAI se devuelve el motor de siempre, sin nada mas.
+    """
+    import p6_assets                                        # noqa: PLC0415
+    try:
+        import ajustes                                      # noqa: PLC0415
+        elegido = {"motor_imagen": ajustes.motor_imagen(),
+                   "modelo_imagen": ajustes.modelo_imagen()}
+    except Exception:                                       # noqa: BLE001
+        elegido = {}
+    extra = ({"modelo": p6_assets._modelo_kie(elegido)}
+             if p6_assets._usa_kie(elegido) else {})
+    return p6_assets._motor_generador(elegido), extra
+
 #: Los ejes que un video necesita ver resueltos. El sujeto es GENERICO a
 #: proposito: lo que tiene que viajar es el estilo, nunca el contenido -- ni los
 #: personajes ni los sitios de la produccion de la que salen los fotogramas.
@@ -433,6 +454,7 @@ def generar(referencias, estilo, ejes=None, peticiones=None, calidad="medium",
     equivocado.
     """
     imagen = medios.motor("imagen_openai/imagen.py")
+    dibujante, extra = _motor_que_dibuja()
     reglas = medios.motor("reglas/reglas.py")
     avisar = avisar or (lambda *a, **k: None)
     rutas = [r for r in (referencias or []) if os.path.exists(r)]
@@ -490,8 +512,8 @@ def generar(referencias, estilo, ejes=None, peticiones=None, calidad="medium",
     def dibujar(indice, eje):
         prompt = prompt_de_eje(eje, estilo, peticiones.get(eje), guia, bloque,
                                idioma=idioma)
-        png, meta = imagen.generar(prompt, refs, quality=calidad,
-                                   tamano="apaisado")
+        png, meta = dibujante.generar(prompt, refs, quality=calidad,
+                                      tamano="apaisado", **extra)
         guardar(clave, eje, png, raiz)
         resultados[indice] = (eje, float(meta.get("coste") or 0.0))
         # LA BARRA CUENTA LO TERMINADO, no lo empezado: con varias a la vez, «3
@@ -682,7 +704,7 @@ def dibujar_desde_guia(estilo, destino, ejes=None, calidad="medium",
     lamina con su descripcion generica de siempre, pagaba la imagen y devolvia
     otra vez lo mismo, con la correccion dada por aplicada.
     """
-    imagen = medios.motor("imagen_openai/imagen.py")
+    imagen, extra = _motor_que_dibuja()
     reglas = medios.motor("reglas/reglas.py")
     avisar = avisar or (lambda *a, **k: None)
     pedidos = [e for e in (ejes or EJES) if e in EJES]
@@ -719,7 +741,7 @@ def dibujar_desde_guia(estilo, destino, ejes=None, calidad="medium",
         # SIN referencias: no hay ninguna que mandar, y mandar una lamina vacia
         # es lo que provoca el "Unsupported content type" que no dice nada.
         png, meta = imagen.generar(prompt, [], quality=calidad,
-                                   tamano="apaisado")
+                                   tamano="apaisado", **extra)
         ruta = os.path.join(destino, f"{eje}.png")
         with open(ruta, "wb") as fh:
             fh.write(png)

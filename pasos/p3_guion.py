@@ -103,7 +103,7 @@ import subprocess  # noqa: F401  (las pruebas sustituyen p3_guion.subprocess.Pop
 import time
 
 try:
-    from . import cli_claude, comun, cta, estadisticas, fuentes, marcas_tts
+    from . import cli_claude, comun, cta, estadisticas, fuentes, marcas_tts, variedad
 except ImportError:  # ejecutado con la carpeta pasos directamente en sys.path
     import cli_claude
     import comun
@@ -111,6 +111,7 @@ except ImportError:  # ejecutado con la carpeta pasos directamente en sys.path
     import estadisticas
     import fuentes
     import marcas_tts
+    import variedad
 
 PASO = "guion"
 
@@ -404,7 +405,7 @@ REGLA_GUION_PROPIO = (
 
 
 def _instruccion(transcript, metadatos, brief, anterior, opciones, correcciones,
-                 idioma, previo=None, origen=None):
+                 idioma, previo=None, origen=None, seccion_variedad=""):
     """Texto completo que se le pasa al CLI por la entrada estandar.
 
     'previo' son los datos que devolvio el intento que se esta corrigiendo. No
@@ -412,6 +413,9 @@ def _instruccion(transcript, metadatos, brief, anterior, opciones, correcciones,
     este es de hace un minuto y el modelo no lo recuerda, porque cada llamada al
     CLI es una sesion limpia.
 
+    'seccion_variedad' es lo que dice `variedad.bloque_para_guion`: el gancho y
+    la estructura de ESTE video y los ultimos del canal. Viaja en la instruccion
+    y no en los params, asi que no mueve la firma del guion.
     """
     presupuesto, minimo, maximo = _horquilla(brief, idioma)
     nombre_idioma = _nombre_idioma(brief, idioma)
@@ -576,6 +580,12 @@ def _instruccion(transcript, metadatos, brief, anterior, opciones, correcciones,
     # Va como seccion propia y pegada a la instruccion de la iteracion porque no
     # es una comprobacion que se pasa al final: es lo primero que hay que
     # decidir, antes de escribir la primera frase.
+    #
+    # Y DELANTE, lo que distingue a este video de los anteriores del canal: el
+    # gancho y la estructura concretos. La seccion de abajo dice como es un buen
+    # relato; esta dice cual toca esta vez (ver pasos/variedad.py).
+    if seccion_variedad:
+        partes.extend(["", seccion_variedad])
     partes.extend([
         "",
         "== COMO SE ESTRUCTURA ESTE VIDEO ==",
@@ -1382,6 +1392,15 @@ def _redactar(proyecto, params, avisar):
     prevision_llamada = estadisticas.estimar(PASO, palabras_material,
                                              ajuste=ajuste)
 
+    # LA VARIEDAD DEL CANAL, solo en el PRIMER borrador (o desde cero) y nunca
+    # sobre un guion propio: sobre un guion ya escrito, cambiarle el gancho es
+    # rehacer la voz y las imagenes de un video que nadie pidio cambiar, y un
+    # guion de la casa no se reescribe. Ver pasos/variedad.py.
+    con_variedad = anterior is None and not opciones["guion_propio"]
+    eleccion = variedad.elegir(proyecto) if con_variedad else None
+    seccion_variedad = (variedad.bloque_para_guion(proyecto, eleccion)
+                        if eleccion else "")
+
     # LOS AVISOS SON DEL INTENTO QUE SE ENTREGA, no de todos los que se pagaron.
     # Con una lista compartida, un intento descartado dejaba puestos los suyos
     # --«repuestas tres tildes», «etiqueta desconocida»-- encima de un guion que
@@ -1394,13 +1413,18 @@ def _redactar(proyecto, params, avisar):
         datos["_bloques"] = bloques
         datos["_avisos"] = propios
         palabras = sum(marcas_tts.contar_palabras(b["texto"]) for b in bloques)
-        return _problemas(bloques, palabras, brief_doc, opciones, idioma)
+        motivos = _problemas(bloques, palabras, brief_doc, opciones, idioma)
+        if eleccion and bloques:
+            motivos.extend(variedad.revisar(
+                proyecto, str(datos.get("titulo") or ""),
+                variedad.primera_frase(bloques[0]["texto"])))
+        return motivos
 
     datos, sobre, intentos, pendientes = _pedir(
         lambda correcciones, previo: _instruccion(transcript, metadatos,
                                                   brief_doc, anterior, opciones,
                                                   correcciones, idioma, previo,
-                                                  origen),
+                                                  origen, seccion_variedad),
         opciones, trabajo, avisar, (0.05, 0.95),
         f"redactando el guion en {_nombre_idioma(brief_doc, idioma)} "
         f"con {opciones['modelo']}",
@@ -1438,6 +1462,9 @@ def _redactar(proyecto, params, avisar):
                for b in bloques]
     avisos = list(_avisos(bloques, palabras, brief_doc, idioma))
     avisos.extend(pendientes)
+    frase_gancho = variedad.primera_frase(bloques[0]["texto"]) if bloques else ""
+    if eleccion:
+        avisos.extend(variedad.avisos(frase_gancho))
     tokens = comun.tokens_de_cli(sobre)
 
     avisar(0.96, "guardando el guion")
@@ -1481,8 +1508,18 @@ def _redactar(proyecto, params, avisar):
         # marca en pantalla es publicidad, y la publicidad que no se ha pedido no
         # se pone.
         "cta": opciones.get("cta"),
+        # Y QUE GANCHO Y QUE ESTRUCTURA SE LE PIDIERON, por lo mismo: va en el
+        # documento y no en `salidas`, asi que no mueve ningun sello. Sin
+        # eleccion (un guion propio, una iteracion) no se escribe.
+        **({"variedad": dict(eleccion, canal=variedad.canal_de(proyecto))}
+           if eleccion else {}),
     }
     comun.escribir_json(os.path.join(trabajo, "guion.json"), documento)
+    if eleccion:
+        # se apunta DESPUES de escribir el guion: si algo de arriba revienta, la
+        # memoria no recuerda un video que no existe
+        variedad.registrar(proyecto, eleccion["gancho"], eleccion["estructura"],
+                           titulo, frase_gancho)
     comun.escribir_texto(
         os.path.join(trabajo, "guion.txt"),
         f"{titulo}\n\n"

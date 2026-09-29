@@ -24,6 +24,20 @@
       "nota": "Respaldo, no la via principal. Solo cubre la imagen DEVUELTA, que es la parte pequena, y solo se usa cuando la API no devuelve 'usage' y por tanto no hay tokens que tarifar. Cuando hay usage manda usd_por_token, y las dos no se suman nunca: la imagen devuelta ya son los tokens de salida."
     }
   },
+  "kie": {
+    "usd_por_credito": 0.005,
+    "creditos_por_imagen": {
+      "google/nano-banana-edit": 4,
+      "bytedance/seedream-v4-edit": 3.5,
+      "nano-banana-pro": {
+        "1K": 18,
+        "2K": 18,
+        "4K": 24
+      }
+    },
+    "verificado": false,
+    "nota": "kie.ai cobra en CREDITOS y por imagen, lleve las referencias que lleve: aqui no hay tokens de entrada, y ese es todo el ahorro frente a gpt-image-2 (donde las referencias son el 87 % del gasto). Los creditos por modelo se escribieron SIN poder abrir kie.ai/pricing: 'verificado' pasa a true cuando herramientas/probar_kie.py los compare con lo que la cuenta descuenta de verdad. Un modelo con creditos por resolucion (1K/2K/4K) cobra segun la calidad pedida (low/medium/high, ver motores/imagen_kie/modelos.json)."
+  },
   "tts": {
     "proveedor": "cartesia",
     "modelo": "sonic-3",
