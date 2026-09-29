@@ -1,4 +1,52 @@
-# RETOMAR — estado al cerrar el 10-09-2026
+# RETOMAR — estado al cerrar el 29-09-2026
+
+**Lo último (29-09): la fábrica para YouTube**, en la rama
+`claude/eloquent-hamilton-i1f2gu` de `esequielp/as-video-studio`, SIN desplegar.
+El plan y las cuentas están en `docs/PLAN-FABRICA-YOUTUBE.md`; las reglas que
+cuestan dinero, en «La fábrica para YouTube» de `CLAUDE.md`. En corto:
+
+- motor de imagen **kie.ai** (`motores/imagen_kie`) al lado del de OpenAI, elegido
+  por proyecto; ajuste en Configuración para los vídeos nuevos;
+- ritmo **Documental** (7-12 s por plano) para vídeos largos;
+- **variedad del canal** en el guion (`pasos/variedad.py`);
+- tanda **produccion** («Producir el vídeo») tras revisar el guion;
+- **Sacar un Short** de un vídeo terminado (`POST /api/proyectos/{pid}/short`);
+- **ficha de publicación** para YouTube (`pasos/publicacion.py`).
+
+Las 26 suites en verde en Linux salvo UNA comprobación de `prueba_piezas`
+(«lo que no se ha podido retirar se dice por su nombre»), que depende de que
+Windows no deje borrar un fichero abierto y en Linux no puede fallar así: ya
+fallaba antes de estos cambios. `prueba_login` no corre en Linux
+(`creationflags` es solo de Windows). Herramientas de análisis limpias.
+
+**Probado de verdad** (con el CLI de Claude, sin gastar API de pago): dos guiones
+seguidos del mismo canal reciben gancho y estructura distintos y los obedecen;
+un Short sacado de un largo abre con otro gancho; la ficha sale con títulos,
+descripción y etiquetas. **Sin probar contra kie.ai**: desde el entorno donde se
+programó no se llegaba a `api.kie.ai`. Lo primero al retomar es la Fase 0:
+
+```bash
+python herramientas/probar_kie.py --saldo
+python herramientas/probar_kie.py --ref lamina.png --prompts prompts.txt \
+    --modelo google/nano-banana-edit --modelo bytedance/seedream-v4-edit
+```
+
+y corregir `motores/imagen_kie/modelos.json` y el bloque `kie` de
+`tarifas.json` con lo que diga (y ponerles `"verificado": true`).
+
+### Dos trampas de correr las suites en Linux (no son fallos del código)
+
+- **Chromium no arranca si `TMPDIR` es una ruta larga**: su socket de un solo
+  proceso no cabe en los 108 caracteres de un socket Unix, y sale con código -5
+  sin escribir el PNG («Edge no genero ...»). Con `ESTUDIO_EDGE` apuntando a un
+  envoltorio que ponga `TMPDIR=/tmp` va bien.
+- **Sin `TEMP` puesto**, `prueba_pasos_visuales` escribe en una carpeta que se
+  llama literalmente `C:\Windows\Temp` DENTRO del repo. No es del producto: la
+  prueba lee `%TEMP%`. Poner `TEMP` antes de correrla.
+
+---
+
+## Antes: estado al cerrar el 10-09-2026
 
 **Lo último (10-09, tarde): la guía de inicio y el asistente**, desplegados en
 el VPS (ver §7). Las 23 suites en verde y las herramientas de análisis limpias.

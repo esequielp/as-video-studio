@@ -41,6 +41,28 @@ el estilo obligaba a acordarse de cambiarlas en cada encargo.
 
 ---
 
+## Para un canal de YouTube
+
+Lo que se añadió para producir a volumen sin que el canal se vea plantillado
+(el porqué y las cuentas, en [docs/PLAN-FABRICA-YOUTUBE.md](docs/PLAN-FABRICA-YOUTUBE.md)):
+
+- **Imágenes con kie.ai** (Configuración → kie.ai): tarifa plana por imagen, las
+  referencias no se pagan aparte. Es el punto de partida de los vídeos NUEVOS;
+  los que ya existen siguen con OpenAI.
+- **Ritmo «Documental»** (planos de 7 a 12 s) para vídeos largos: menos de la
+  mitad de imágenes que el ritmo medio.
+- **Variedad entre vídeos del canal**: cada guion recibe un gancho y una
+  estructura distintos de los últimos del mismo estilo, y no puede copiar la
+  primera frase de otro (`pasos/variedad.py`).
+- **«Producir el vídeo»**: revisado el guion, voz + imágenes + montaje de una
+  tirada. Es la única parada que protege dinero.
+- **«Sacar un Short»** de un vídeo terminado: vertical, ~55 s, mismo material y
+  estilo, guion propio con otro gancho.
+- **Ficha para YouTube** debajo del vídeo: títulos, descripción, capítulos con su
+  minuto real y etiquetas (`pasos/publicacion.py`).
+
+---
+
 ## Ponerlo en un servidor (lo normal)
 
 Una línea en la consola del VPS, cinco minutos, y queda montado con su dirección,
@@ -74,7 +96,8 @@ autentica nada, a propósito (ver «Quién está dentro» más abajo).
 | **Microsoft Edge** (o Chrome) | rasterizar cada plano | igual |
 | Las **fuentes** de los subtítulos y las cartelas | medir y dibujar el texto | ver el aviso de `motores/README.md` |
 | El **CLI de Claude**, con sesión | el guion, el catálogo visual, los rótulos | no hay vídeo |
-| Una **clave de OpenAI** | las imágenes | no hay vídeo |
+| Una **clave de OpenAI** | las imágenes | no hay vídeo (salvo que uses kie.ai) |
+| Una **clave de kie.ai** (opcional) | las imágenes, más baratas: tarifa plana por imagen, las referencias no se pagan aparte | se genera con OpenAI |
 | Una **clave de Cartesia** | la voz | no hay vídeo |
 | Las de **Jamendo** y **FreeSound** | música y efectos | el vídeo sale sin ellos; son las únicas prescindibles |
 
@@ -148,7 +171,7 @@ De ahí salen dos reglas que parecen arbitrarias y no lo son:
 powershell -NoProfile -File pruebas.ps1
 ```
 
-Veinticuatro suites, y **por PowerShell y no por bash**: Edge headless devuelve
+Veintiséis suites, y **por PowerShell y no por bash**: Edge headless devuelve
 código 0 y no escribe el PNG cuando se lanza desde un shell sandboxeado, así que
 `prueba_pasos_visuales` falla con «Edge no generó ...png» sin que nada esté roto.
 
@@ -208,6 +231,7 @@ aislamiento por proceso:
 | `ESTUDIO_MOTORES`, `ESTUDIO_FUENTES` | los motores y las tipografías |
 | `ESTUDIO_EDGE`, `ESTUDIO_FFMPEG`, `ESTUDIO_FFPROBE` | los ejecutables |
 | `ESTUDIO_LOTES` | cuántos planos se renderizan a la vez |
+| `ESTUDIO_KIE_API`, `ESTUDIO_KIE_FICHEROS`, `ESTUDIO_KIE_SUBIDAS` | dónde se habla con kie.ai y dónde se recuerdan las referencias ya subidas |
 | `ESTUDIO_SIMULAR=1` | no sale a ninguna API de pago: lo usan las pruebas |
 
 **`ESTUDIO_ESTADISTICAS` importa más de lo que parece.** El histórico guarda 30

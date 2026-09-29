@@ -1,6 +1,25 @@
 # Plan: fábrica de vídeos para YouTube (largos + Shorts) sobre AS Video Studio
 
-**Fecha:** 29-09-2026 · **Estado:** análisis y plan, sin código tocado todavía.
+**Fecha:** 29-09-2026 · **Estado:** implementado en la rama
+`claude/eloquent-hamilton-i1f2gu` salvo la verificación contra kie.ai (ver
+«Estado de cada fase» justo debajo).
+
+## Estado de cada fase (29-09-2026, noche)
+
+| Fase | Estado | Dónde |
+|---|---|---|
+| 0 — Prueba de kie.ai | **Pendiente, y es lo primero**: la herramienta está hecha, falta correrla con la cuenta real (desde el entorno de desarrollo no se llegaba a kie.ai) | `herramientas/probar_kie.py` |
+| 1 — Motor kie.ai | Hecho y probado con un doble de la API (tareas, subidas, errores, sin saldo, recorte). Selector por proyecto, clave en Configuración, prueba de la clave por su saldo, tarifa, coste en pantalla, aviso antes de lanzar sin clave | `motores/imagen_kie/`, `pasos/p6_assets.py`, `pasos/ajustes.py`, `nucleo/coste.py` |
+| 2 — Ritmos | Hecho: ritmo «Documental» (7-12 s, media estimada 7,5 s hasta medirla) | `pasos/presets_light.py` |
+| 3 — Variedad | Hecho y probado **con el CLI real**: dos guiones seguidos del mismo canal obedecen ganchos y estructuras distintos | `pasos/variedad.py`, `pasos/p3_guion.py` |
+| 4 — Producir todo | Hecho: tanda `produccion` y botón «Producir el vídeo»; ficha de publicación probada con el CLI real | `app.py`, `web/app.js`, `pasos/publicacion.py` |
+| 5 — Shorts de un largo | Hecho y probado con el CLI real, **con un cambio respecto al plan**: el Short no reutiliza las imágenes del largo (en vertical son otras: el tamaño entra en la huella), reutiliza material y estilo y escribe su propio guion | `crear_short` en `app.py` |
+| 6 — Opcional | Sin empezar: voz por kie.ai/ElevenLabs (hay que ver si da marcas por palabra) y un clip de vídeo IA para el gancho de los Shorts | — |
+
+**Cómo usarlo, en cuatro pasos:** Configuración → kie.ai → pega la clave y elige
+«kie.ai» para los vídeos nuevos (y el modelo) · crea el vídeo con su estilo y,
+si es largo, el ritmo «Documental» · revisa el guion y pulsa «Producir el
+vídeo» · debajo del MP4, «Escribir la ficha» y, si quieres, «Sacar un Short».
 **Entrada:** `BRIEF-VIDEO-FACTORY-YOUTUBE.md` (v3.0), `PROYECTO-GENERACION-DE-VIDEOS-SHORTS-Y-LARGOS.md`,
 `YouTube_Shorts_Factibilidad.docx` y la lectura del código de este repo.
 

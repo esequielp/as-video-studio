@@ -6033,6 +6033,7 @@ def guardar_claves(cuerpo: dict = Body(default=None)):
     anotar_global("claves_guardadas", {
         "openai": len(ficha["openai"]),
         "cartesia": ficha["cartesia"]["puesta"],
+        "kie": bool((ficha.get("kie") or {}).get("puesta")),
         "cuentas_cli": len(ficha["claude_cli"]["cuentas"])})
     ficha["cuentas_imagen"] = _cuentas_de_imagen()
     return ficha
@@ -6386,9 +6387,13 @@ def _foto_para_asistente(pid, pantalla=None):
     # -- claves y cuentas (sin ninguna clave dentro)
     try:
         resumen = _claves().resumen()
+        kie_puesta = bool((resumen.get("kie") or {}).get("puesta"))
         lineas.append("claves: OpenAI (imagenes) "
                       + ("puesta" if resumen["openai"] else
-                         "SIN PONER (sin ella no se generan imagenes)")
+                         ("sin poner (las imagenes van por kie.ai)" if kie_puesta
+                          else "SIN PONER (sin ella ni la de kie.ai no se generan imagenes)"))
+                      + "; kie.ai (imagenes, mas baratas) "
+                      + ("puesta" if kie_puesta else "sin poner")
                       + "; Cartesia (voz) "
                       + ("puesta" if resumen["cartesia"]["puesta"] else "sin poner")
                       + "; Jamendo (musica) "

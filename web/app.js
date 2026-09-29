@@ -11032,18 +11032,22 @@ function tarjetaFinalInicio() {
     pastillaEstado(puesta ? 'ok' : (opcional ? 'parcial' : 'error'),
       puesta ? 'puesta' : (opcional ? 'para luego' : 'sin poner')),
     h('span', {}, nombre));
-  const faltan = [!claude, !(ficha.openai && ficha.openai.length), !(ficha.cartesia && ficha.cartesia.puesta)]
+  // LAS IMÁGENES VALEN CON CUALQUIERA DE LAS DOS: OpenAI o kie.ai
+  const conOpenAI = !!(ficha.openai && ficha.openai.length);
+  const conKie = !!(ficha.kie && ficha.kie.puesta);
+  const faltan = [!claude, !(conOpenAI || conKie), !(ficha.cartesia && ficha.cartesia.puesta)]
     .filter(Boolean).length;
   return [
     fila('Claude — guion, catálogo, rótulos y el asistente', claude),
-    fila('OpenAI — imágenes', !!(ficha.openai && ficha.openai.length)),
+    fila('OpenAI — imágenes', conOpenAI, conKie),
+    fila('kie.ai — imágenes más baratas', conKie, true),
     fila('Cartesia — voz', !!(ficha.cartesia && ficha.cartesia.puesta)),
     fila('Jamendo — música', !!(ficha.jamendo && ficha.jamendo.puesta), true),
     fila('FreeSound — efectos', !!(ficha.freesound && ficha.freesound.puesta), true),
     faltan
       ? h('div', { clase: 'caja-aviso' },
         `Falta${faltan > 1 ? 'n' : ''} ${faltan} de las tres que hacen falta para un vídeo `
-        + '(Claude, OpenAI y Cartesia). Sin ellas no sale el vídeo entero: se '
+        + '(Claude, OpenAI o kie.ai, y Cartesia). Sin ellas no sale el vídeo entero: se '
         + 'ponen desde Configuración, el engranaje de arriba a la derecha.')
       : h('div', { clase: 'caja-info' },
         'Está todo. Lo siguiente es crear un estilo (cómo se dibuja y cómo se '

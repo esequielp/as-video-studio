@@ -70,6 +70,50 @@ migración.
 
 ---
 
+## La fábrica para YouTube: kie.ai, variedad, producción, Short y ficha
+
+Lo que no se deduce leyendo el código (el plan y las cuentas, en
+`docs/PLAN-FABRICA-YOUTUBE.md`):
+
+- **Dos motores de imagen con el MISMO contrato.** `motores/imagen_kie` devuelve
+  `(png, meta)` como `imagen_openai`; lo elige cada proyecto con
+  `assets.motor_imagen` (`openai | kie | adoptar`) y, con kie, `modelo_imagen`.
+  Las referencias se preparan SIEMPRE con `imagen_openai.normalizar`: una caché
+  de referencias por proveedor acabaría en dos láminas distintas.
+- **`motor_imagen` se escribe al CREAR el proyecto y solo si no es OpenAI**
+  (`ajustes.params_de_imagen_nuevos` / `params_de_motor_nuevos`). Es la regla 1
+  de arriba: con el ajuste de fábrica un proyecto nace exactamente como antes.
+- **La huella de caché de una imagen lleva el motor SOLO si es kie**
+  (`p6_assets._huella_de_imagen`). `huella` serializa también las claves que
+  valen `None`, así que un `"motor": None` para todos cambiaría la firma de cada
+  imagen ya pagada. Es el mismo truco que ya usaba `tamano`.
+- **El recorte de referencias es de p6, no del motor.** kie.ai admite menos por
+  llamada (`max_referencias` en `modelos.json`), el prompt las cita por
+  POSICIÓN y se escribe después de la lista: `_referencias_para_el_motor` recorta
+  por papel ANTES de `_prompt_completo`. El motor levanta si le llegan de más.
+- **`modelos.json` y el bloque `kie` de `tarifas.json` están SIN VERIFICAR**
+  (`"verificado": false`): se escribieron sin poder abrir docs.kie.ai. Antes de
+  la primera tanda de verdad, `herramientas/probar_kie.py --saldo` y luego 20
+  planos de un proyecto real con dos modelos: dice lo que cobra cada imagen,
+  mirando el saldo antes y después.
+- **La memoria del canal NO es un param** (`pasos/variedad.py`). Vive en
+  `_memoria_canal.json`, en la carpeta de los proyectos, y entra en la
+  INSTRUCCIÓN del guion, no en su firma: si fuera un param, escribir un vídeo
+  dejaría obsoletos los guiones de todos los demás del canal. Solo actúa en el
+  primer borrador (o desde cero) y nunca sobre un guion propio.
+- **«Producir el vídeo» es la tanda `produccion`** (`TANDAS_LIGHT`): voz +
+  imágenes + montaje en UN trabajo, modo `pendientes`. No es un camino nuevo.
+- **El Short es `duplicar` desde el guion** (`crear_short`): viajan el material
+  y el estilo; el guion, la voz y las imágenes no, que en vertical son otras de
+  todas formas. `duplicar` no copia `estilo_light`: `crear_short` lo copia a mano
+  para que el Short comparta la memoria del canal.
+- **La ficha de publicación no es un paso del grafo** (`pasos/publicacion.py`,
+  `/api/proyectos/{pid}/publicacion`). Va como trabajo porque una llamada al
+  CLI puede pasar del minuto que aguanta el proxy. Los capítulos salen de las
+  secciones del guion y de los tiempos de la voz; el modelo solo los nombra.
+
+---
+
 ## Copiar un proyecto o un estilo a otra máquina
 
 **No basta con copiar la carpeta.** Un proyecto guarda rutas absolutas en tres
@@ -267,7 +311,7 @@ que nunca la fijaron, y regenerarlas se paga.
 powershell -NoProfile -File pruebas.ps1
 ```
 
-Las veintitrés en verde, y las herramientas de análisis sin nada que decir
+Las veintiséis en verde, y las herramientas de análisis sin nada que decir
 (`huerfanas_js` trae dos sospechosas de siempre, `async` y `fallar`, que no son
 llamadas).
 Y si has tocado la interfaz, **ábrela**: una regla de CSS de menos o un bloque
