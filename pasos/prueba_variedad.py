@@ -178,12 +178,81 @@ def prueba_capitulos():
               "el texto para pegar lleva los capitulos y el aviso de contenido sintetico")
 
 
+def prueba_retencion():
+    seccion("la retencion va en la instruccion, distinta para un Short")
+    import p3_guion
+    largo = {"formato": "horizontal", "duracion_objetivo_s": 600}
+    corto = {"formato": "vertical", "duracion_objetivo_s": 55}
+    comprobar(not p3_guion.es_short(largo) and p3_guion.es_short(corto),
+              "un Short es vertical y de tres minutos como mucho")
+    comprobar(not p3_guion.es_short({"formato": "vertical", "duracion_objetivo_s": 600}),
+              "un vertical de diez minutos no es un Short")
+    comprobar("TRES TIEMPOS" in p3_guion._seccion_retencion(largo),
+              "el largo pide la apertura en tres tiempos y re-enganches")
+    comprobar("SE ENGANCHA CON EL PRINCIPIO" in p3_guion._seccion_retencion(corto),
+              "el Short pide el final en bucle")
+
+
+def prueba_miniaturas():
+    seccion("las miniaturas: la idea de la ficha, el estilo de los planos, el texto encima")
+    import io
+    import miniatura
+    from PIL import Image
+
+    ficha = publicacion.componer("T", [], {"miniatura": {
+        "escena": "A lighthouse in a storm", "textos": ["once noches sin luz y mas", "", "El farero"]}})
+    igual(ficha["miniatura"]["textos"], ["once noches sin luz", "El farero"],
+          "los textos se quedan en cuatro palabras como mucho y sin vacios")
+
+    proyecto_m = proyecto("con miniaturas")
+    os.makedirs(proyecto_m.raiz, exist_ok=True)
+    with open(proyecto_m.ruta(publicacion.NOMBRE_JSON), "w", encoding="utf-8") as fh:
+        import json
+        json.dump(ficha, fh)
+    plano = os.path.join(TEMPORAL, "plano.png")
+    Image.new("RGB", (1536, 1024), (30, 60, 90)).save(plano)
+    pedidas = []
+
+    class MotorFalso:
+        @staticmethod
+        def generar(prompt, referencias, **kw):
+            pedidas.append((prompt, list(referencias), kw))
+            salida = io.BytesIO()
+            Image.new("RGB", (1536, 1024), (200, 120, 40)).save(salida, "PNG")
+            return salida.getvalue(), {"coste": 0.02}
+
+    originales = (miniatura.referencias_del_video, miniatura.p6_assets._motor_generador)
+    miniatura.referencias_del_video = lambda p: [plano]
+    miniatura.p6_assets._motor_generador = lambda p: MotorFalso
+    try:
+        hecho = miniatura.generar(proyecto_m, {"motor_imagen": "kie"})
+    finally:
+        miniatura.referencias_del_video, miniatura.p6_assets._motor_generador = originales
+    igual(len(hecho["miniaturas"]), 3, "tres propuestas")
+    igual(len(pedidas), 3, "tres imagenes pedidas al motor del proyecto")
+    comprobar("A lighthouse in a storm" in pedidas[0][0] and "no text" in pedidas[0][0],
+              "con la escena de la ficha y sin letras dentro de la imagen")
+    igual(pedidas[0][2].get("modelo", "x"), None,
+          "con kie.ai se pasa el modelo del proyecto (None = el por defecto)")
+    primera = Image.open(proyecto_m.ruta(hecho["miniaturas"][0]["ruta"]))
+    igual(primera.size, (1280, 720), "cada miniatura mide 1280x720")
+    fondo = Image.open(proyecto_m.ruta(hecho["miniaturas"][0]["fondo"])).convert("RGB")
+    igual(fondo.size, (1280, 720), "y queda al lado su version sin texto, del mismo tamano")
+    comprobar(primera.convert("RGB").tobytes() != fondo.tobytes(),
+              "el texto se ha puesto encima de la version con texto")
+    igual(hecho["coste_usd"], 0.06, "y se apunta lo que costaron")
+    igual(miniatura.leer(proyecto_m)["miniaturas"][0]["texto"], "once noches sin luz",
+          "el indice se lee de vuelta")
+
+
 def main():
     try:
         prueba_eleccion()
         prueba_revision()
         prueba_sin_firma()
         prueba_capitulos()
+        prueba_retencion()
+        prueba_miniaturas()
     finally:
         shutil.rmtree(TEMPORAL, ignore_errors=True)
     print()

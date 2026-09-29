@@ -9000,8 +9000,9 @@ INSTRUCCION_SHORT = (
     "mismo material que el video largo «{titulo}». No lo resumas entero: elige UN "
     "solo momento, dato o giro --el mas fuerte-- y cuentalo completo. El gancho es "
     "la primera frase, se dice en dos o tres segundos y NO puede ser el del video "
-    "largo. Frases cortas, sin introducciones. Cierra en una frase invitando a ver "
-    "el video completo en el canal.")
+    "largo. Frases cortas, sin introducciones. Justo antes de la ultima frase, "
+    "invita en pocas palabras a ver el video completo en el canal; la ultima "
+    "frase remata y enlaza con la primera, que un Short se repite solo.")
 
 
 @app.post("/api/proyectos/{pid}/short", status_code=201)
@@ -9127,6 +9128,70 @@ def escribir_publicacion(pid: str):
                                    _correr_publicacion, ctx)
     _registrar_trabajo(trabajo_id, ctx.id)
     ctx.bitacora.anotar("publicacion_lanzada", None, {"trabajo": trabajo_id})
+    return {"trabajo_id": trabajo_id, "trabajo": ctx.gestor.estado(trabajo_id),
+            "eventos": f"/api/trabajos/{trabajo_id}/eventos"}
+
+
+# ==========================================================================
+# LAS MINIATURAS (pasos/miniatura.py)
+#
+# Tres propuestas de 1280x720 con la idea de la ficha de publicacion, dibujadas
+# con el motor del video y dos de sus planos como referencia. Cuestan tres
+# imagenes, asi que se dice cuanto ANTES de pulsar, y van como trabajo.
+# ==========================================================================
+
+NOMBRE_TRABAJO_MINIATURAS = "miniaturas"
+
+
+def _correr_miniaturas(avisar, ctx):
+    with COSTE.contexto(ctx.proyecto, None):
+        return PASOS_MODULOS.miniatura.generar(
+            ctx.proyecto, ctx.estado.params("assets") or {}, avisar)
+
+
+def _trabajo_de_miniaturas(ctx):
+    for ficha in ctx.gestor.listar(activos=True):
+        if ficha.get("nombre") == NOMBRE_TRABAJO_MINIATURAS:
+            return ficha
+    return None
+
+
+@app.get("/api/proyectos/{pid}/miniaturas")
+def leer_miniaturas(pid: str):
+    """Las miniaturas hechas y lo que costaria hacer otras tres. -> {hechas, usd_previsto}"""
+    if PASOS_MODULOS is None:
+        raise ErrorApi(503, f"los pasos no se han podido cargar: {ERROR_PASOS}")
+    ctx = contexto(pid)
+    miniatura = PASOS_MODULOS.miniatura
+    assets = ctx.estado.params("assets") or {}
+    por_imagen = _usd_por_imagen(miniatura.CALIDAD, assets.get("motor_imagen") or "openai",
+                                 assets.get("modelo_imagen"))
+    ficha = PASOS_MODULOS.publicacion.leer(ctx.proyecto) or {}
+    return {"hechas": miniatura.leer(ctx.proyecto),
+            "cuantas": miniatura.CUANTAS,
+            "usd_previsto": round(por_imagen * miniatura.CUANTAS, 3),
+            "con_idea": bool((ficha.get("miniatura") or {}).get("escena")),
+            "trabajo": _trabajo_de_miniaturas(ctx) or {}}
+
+
+@app.post("/api/proyectos/{pid}/miniaturas", status_code=202)
+def hacer_miniaturas(pid: str):
+    """Dibuja tres propuestas de miniatura en segundo plano. -> trabajo"""
+    if PASOS_MODULOS is None:
+        raise ErrorApi(503, f"los pasos no se han podido cargar: {ERROR_PASOS}")
+    ctx = contexto(pid)
+    ficha = PASOS_MODULOS.publicacion.leer(ctx.proyecto) or {}
+    if not (ficha.get("miniatura") or {}).get("escena"):
+        raise ErrorApi(409, "falta la idea de la miniatura: escribe antes la ficha "
+                            "de publicación (o reescríbela si es de antes)")
+    if not PASOS_MODULOS.miniatura.referencias_del_video(ctx.proyecto):
+        raise ErrorApi(409, "todavía no hay planos dibujados: la miniatura se hace "
+                            "con el estilo de las imágenes del vídeo")
+    if _trabajo_de_miniaturas(ctx) is not None:
+        raise ErrorApi(409, "las miniaturas ya se están dibujando")
+    trabajo_id = ctx.gestor.lanzar(NOMBRE_TRABAJO_MINIATURAS, _correr_miniaturas, ctx)
+    _registrar_trabajo(trabajo_id, ctx.id)
+    ctx.bitacora.anotar("miniaturas_lanzadas", None, {"trabajo": trabajo_id})
     return {"trabajo_id": trabajo_id, "trabajo": ctx.gestor.estado(trabajo_id),
             "eventos": f"/api/trabajos/{trabajo_id}/eventos"}
 

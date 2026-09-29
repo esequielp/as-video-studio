@@ -11,7 +11,11 @@ cuestan dinero, en «La fábrica para YouTube» de `CLAUDE.md`. En corto:
 - **variedad del canal** en el guion (`pasos/variedad.py`);
 - tanda **produccion** («Producir el vídeo») tras revisar el guion;
 - **Sacar un Short** de un vídeo terminado (`POST /api/proyectos/{pid}/short`);
-- **ficha de publicación** para YouTube (`pasos/publicacion.py`).
+- **ficha de publicación** para YouTube (`pasos/publicacion.py`);
+- **miniaturas**: tres propuestas de 1280x720 con el estilo del vídeo y el texto
+  puesto encima (`pasos/miniatura.py`);
+- **retención** en la instrucción del guion: apertura en tres tiempos,
+  pregunta abierta y re-enganches en los largos; final en bucle en los Shorts.
 
 Las 26 suites en verde en Linux salvo UNA comprobación de `prueba_piezas`
 («lo que no se ha podido retirar se dice por su nombre»), que depende de que

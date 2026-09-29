@@ -8491,6 +8491,78 @@ function panelPublicacion() {
       onclick: () => navigator.clipboard.writeText(PUBLICACION.texto)
         .then(() => toast('ficha copiada'), () => toast('no se ha podido copiar', true)),
     }, 'Copiar')));
+  caja.appendChild(bloqueMiniaturas());
+  return caja;
+}
+
+/* LAS MINIATURAS (pasos/miniatura.py): tres propuestas de 1280x720 con la idea
+   de la ficha y el estilo de los planos del vídeo. Cuestan tres imágenes, así
+   que el precio va en el botón, antes de pulsar. */
+const CLAVE_MINIATURAS = 'miniaturas';
+const MINIATURAS = { pid: '', datos: null };
+
+async function cargarMiniaturas() {
+  const pid = videoAbierto().pid;
+  try {
+    const datos = await pedir(`${API.proyecto(pid)}/miniaturas`);
+    if (videoAbierto().pid !== pid) return;
+    MINIATURAS.datos = datos;
+    const tid = (datos.trabajo || {}).id;
+    if (tid && !APP.seguimientos[CLAVE_MINIATURAS]) {
+      seguirTrabajo(CLAVE_MINIATURAS, tid, () => cargarMiniaturas());
+    }
+  } catch (e) { MINIATURAS.datos = null; }
+  pintarLight();
+}
+
+async function hacerMiniaturas() {
+  const pid = videoAbierto().pid;
+  limpiarError(CLAVE_MINIATURAS);
+  try {
+    const datos = await pedir(`${API.proyecto(pid)}/miniaturas`, { method: 'POST' });
+    seguirTrabajo(CLAVE_MINIATURAS, datos.trabajo_id, () => cargarMiniaturas());
+  } catch (e) {
+    mostrarError(CLAVE_MINIATURAS, e);
+  }
+  pintarLight();
+}
+
+function bloqueMiniaturas() {
+  const v = videoAbierto();
+  if (MINIATURAS.pid !== v.pid) {
+    Object.assign(MINIATURAS, { pid: v.pid, datos: null });
+    cargarMiniaturas();
+  }
+  const datos = MINIATURAS.datos;
+  const caja = h('div', { clase: 'bloque-miniaturas' });
+  if (!datos) return caja;
+  const dibujando = (APP.trabajos[CLAVE_MINIATURAS] || {}).estado === 'ejecutando';
+  const precio = `≈ ${Number(datos.usd_previsto || 0).toFixed(2)} $`;
+  caja.appendChild(h('div', { clase: 'fila' },
+    h('h3', {}, 'Miniaturas'),
+    h('span', { clase: 'crece' }),
+    conAyuda(datos.con_idea
+      ? `Dibuja ${datos.cuantas} propuestas de 1280×720 con el estilo de los planos `
+        + `de este vídeo y un texto corto encima (${precio}). Al lado queda cada una `
+        + 'sin texto, por si prefieres rotularla tú.'
+      : 'Reescribe la ficha: la idea de la miniatura sale de ella.',
+      h('button', {
+        clase: 'mini', disabled: dibujando || !datos.con_idea,
+        onclick: () => hacerMiniaturas(),
+      }, dibujando ? 'dibujando…'
+        : `${(datos.hechas || {}).miniaturas ? 'Otras' : 'Hacer'} ${datos.cuantas} miniaturas · ${precio}`))));
+  const error = ERRORES[CLAVE_MINIATURAS];
+  if (error) caja.appendChild(cajaError(error));
+  const hechas = ((datos.hechas || {}).miniaturas) || [];
+  if (hechas.length) {
+    caja.appendChild(h('div', { clase: 'rejilla-miniaturas' },
+      ...hechas.map(m => h('figure', {},
+        h('img', { src: API.archivo(v.pid, m.ruta), alt: m.texto || '' }),
+        h('figcaption', {},
+          h('a', { href: API.archivo(v.pid, m.ruta), download: '' }, 'Bajar'),
+          ' · ',
+          h('a', { href: API.archivo(v.pid, m.fondo), download: '' }, 'sin texto'))))));
+  }
   return caja;
 }
 /* ==========================================================================

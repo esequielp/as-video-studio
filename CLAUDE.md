@@ -111,6 +111,15 @@ Lo que no se deduce leyendo el código (el plan y las cuentas, en
   `/api/proyectos/{pid}/publicacion`). Va como trabajo porque una llamada al
   CLI puede pasar del minuto que aguanta el proxy. Los capítulos salen de las
   secciones del guion y de los tiempos de la voz; el modelo solo los nombra.
+- **Las miniaturas tampoco son un paso** (`pasos/miniatura.py`): la IDEA sale
+  de la ficha (`miniatura.escena` y `textos`), la IMAGEN la dibuja el motor del
+  proyecto con dos planos del vídeo como referencia, y el TEXTO se pone después
+  con PIL (un generador de imágenes escribe letras mal). Cuestan tres imágenes:
+  el precio va en el botón.
+- **La retención va en la instrucción del guion** (`p3_guion._seccion_retencion`),
+  distinta para un Short (`es_short`: vertical y ≤ 180 s, final en bucle) y para
+  un largo (apertura en tres tiempos, pregunta abierta, re-enganches). Como la
+  variedad, no es un param: no mueve la firma de ningún guion.
 
 ---
 

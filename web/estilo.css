@@ -1940,6 +1940,17 @@ button.primario.grande { padding: 9px 18px; font-size: 14px; }
   border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px;
 }
 .panel-publicacion h3 { margin: 0; font-size: 15px; }
+.bloque-miniaturas { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.bloque-miniaturas h3 { margin: 0; font-size: 14px; }
+.rejilla-miniaturas {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;
+}
+.rejilla-miniaturas figure { margin: 0; }
+.rejilla-miniaturas img {
+  width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block;
+  border-radius: 8px; border: 1px solid var(--linea);
+}
+.rejilla-miniaturas figcaption { font-size: 12px; margin-top: 4px; color: var(--tenue); }
 .ficha-publicacion {
   margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 13px;
   line-height: 1.45; max-height: 420px; overflow: auto;

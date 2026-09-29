@@ -127,11 +127,19 @@ def _instruccion(titulo, idioma, bloques, caps):
         f"  - etiquetas: hasta {MAX_ETIQUETAS} busquedas con las que alguien "
         "encontraria este video.",
         "  - hashtags: tres, sin espacios.",
+        "  - miniatura: la idea de la miniatura. 'escena' describe EN INGLES "
+        "una sola imagen que haga querer pulsar: UN sujeto dominante y grande, "
+        "un momento concreto del video, mucho contraste, fondo sencillo, y el "
+        "tercio izquierdo despejado para poner texto encima. Sin letras en la "
+        "imagen. 'textos' son tres opciones de TRES A CUATRO palabras como "
+        "mucho, en el idioma del video, que NO repitan el titulo: la miniatura "
+        "crea la intriga y el titulo la explica.",
         "",
         "Responde UNICAMENTE con un objeto JSON con esta forma:",
         '{"titulos": ["...", "...", "..."], "descripcion": "...", '
         '"capitulos": [{"id": "B001", "titulo": "..."}], '
-        '"etiquetas": ["..."], "hashtags": ["#..."]}',
+        '"etiquetas": ["..."], "hashtags": ["#..."], '
+        '"miniatura": {"escena": "...", "textos": ["...", "...", "..."]}}',
     ])
 
 
@@ -178,8 +186,26 @@ def componer(titulo, caps, datos=None):
                      for h in _limpia(datos.get("hashtags"), 3)
                      if " " not in h],
         "aviso_sintetico": AVISO_SINTETICO,
+        "miniatura": _miniatura_de(datos.get("miniatura")),
         "del_modelo": bool(datos),
     }
+
+
+#: Cuantas palabras caben en el texto de una miniatura: con mas, en el tamano
+#: al que se ve en un movil deja de leerse.
+MAX_PALABRAS_MINIATURA = 4
+
+
+def _miniatura_de(crudo):
+    """La idea de la miniatura, limpia: {escena, textos}. Vacia si no la hay."""
+    crudo = crudo if isinstance(crudo, dict) else {}
+    textos = []
+    for texto in _limpia(crudo.get("textos"), 3):
+        palabras = texto.split()
+        if palabras:
+            textos.append(" ".join(palabras[:MAX_PALABRAS_MINIATURA]))
+    return {"escena": " ".join(str(crudo.get("escena") or "").split())[:800],
+            "textos": textos}
 
 
 def texto_de(ficha):

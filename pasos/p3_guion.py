@@ -404,6 +404,67 @@ REGLA_GUION_PROPIO = (
     "reescribas con tus palabras y no le cambies el tono.")
 
 
+#: Hasta cuanto dura un Short: YouTube admite tres minutos en vertical.
+SHORT_MAX_S = 180
+
+
+def es_short(brief):
+    """Si el video es un Short: vertical y de tres minutos como mucho."""
+    brief = brief or {}
+    try:
+        segundos = float(brief.get("duracion_objetivo_s") or 0)
+    except (TypeError, ValueError):
+        segundos = 0.0
+    return (comun.normalizar_formato(brief.get("formato")) == "vertical"
+            and 0 < segundos <= SHORT_MAX_S)
+
+
+def _seccion_retencion(brief):
+    """Como se escribe para que la gente SE QUEDE. -> texto de la instruccion
+
+    Las reglas de oficio de abajo dicen como se escribe una frase que se locuta;
+    esto dice como se reparte la atencion a lo largo del video, que es lo que
+    mira YouTube (la retencion) para decidir a quien lo ensena. Es lo que se
+    repite en las guias de 2026 sobre retencion: la caida grande esta en los
+    primeros treinta segundos, y lo que la frena es una apertura en tres tiempos
+    y preguntas abiertas que se pagan despues. En un Short la ventana es de dos
+    segundos y el final se engancha con el principio, porque se repite solo.
+
+    Va en la instruccion y no en los params: no mueve la firma de ningun guion.
+    """
+    if es_short(brief):
+        return "\n".join([
+            "== PARA QUE NO LO PASEN (ES UN SHORT) ==",
+            "  - LOS DOS PRIMEROS SEGUNDOS DECIDEN. La primera frase, de ocho a "
+            "doce palabras, ya es el gancho: nada de contexto, saludo ni «hoy te "
+            "cuento». Empieza en mitad de la accion o con el dato.",
+            "  - UNA SOLA IDEA, contada entera. Cada frase empuja a la siguiente; "
+            "si una frase se puede quitar sin que se note, sobra.",
+            "  - EL FINAL SE ENGANCHA CON EL PRINCIPIO. Un Short se repite solo: "
+            "la ultima frase remata y conecta con la primera (la contesta, la "
+            "completa o la vuelve a plantear), para que al empezar otra vez "
+            "tenga sentido. Si hay que invitar a algo, va justo antes de esa "
+            "ultima frase, no despues.",
+        ])
+    return "\n".join([
+        "== PARA QUE SE QUEDEN HASTA EL FINAL ==",
+        "  - LA APERTURA EN TRES TIEMPOS. De cero a cinco segundos, el gancho. "
+        "De cinco a quince, la promesa: que va a entender quien se quede. De "
+        "quince a treinta, lo que esta en juego: por que le importa. Nada de "
+        "presentarse, de «en este video» ni de pedir que se suscriban aqui.",
+        "  - UNA PREGUNTA ABIERTA QUE SE PAGA AL FINAL. Plantea pronto algo "
+        "que el espectador quiera saber y que no se contesta hasta el cierre, y "
+        "recuerdala una vez a mitad de video, de pasada.",
+        "  - UN RE-ENGANCHE CADA MINUTO, MAS O MENOS. Al pasar de una parada a "
+        "la siguiente, deja una razon para seguir: una pregunta nueva, un giro, "
+        "un dato que cambia lo que se acaba de contar. Y cada parada da algo a "
+        "cambio antes de irse: una pequena respuesta que se entiende sola.",
+        "  - SIN BAJONES. Si un tramo solo explica contexto, acortalo o ponlo "
+        "al servicio de la pregunta abierta: el espectador se va en los tramos "
+        "donde no pasa nada.",
+    ])
+
+
 def _instruccion(transcript, metadatos, brief, anterior, opciones, correcciones,
                  idioma, previo=None, origen=None, seccion_variedad=""):
     """Texto completo que se le pasa al CLI por la entrada estandar.
@@ -623,6 +684,8 @@ def _instruccion(transcript, metadatos, brief, anterior, opciones, correcciones,
         "partirse en dos secciones; lo que no puede pasar es cambiar de parada "
         "sin abrir seccion, porque ahi es donde el motor pone el silencio que "
         "deja respirar el video.",
+        "",
+        _seccion_retencion(brief),
         "",
         "== INSTRUCCION DE ESTA ITERACION ==",
         opciones["prompt_general"] or
