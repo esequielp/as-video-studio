@@ -369,11 +369,25 @@ def segmentar(palabras, minimo=3.0, maximo=6.0, ideal=None,
 
 
 #: Cuanto cuadro se ve con el zoom CERRADO, en fraccion del plano entero. Es
-#: el numero en el que se piensa el movimiento -- "de 100 a 95" -- y no la
+#: el numero en el que se piensa el movimiento -- "de 100 a 71" -- y no la
 #: escala, que es su inversa y por eso enganaba: 1.16 de escala no cerraba un
-#: 16% sino un 14%, y aun asi se notaba de mas. Se bajo a 95 el 20-08-2026: el
-#: zoom tiene que empujar el plano sin que se vea empujar.
-CIERRE = 0.95
+#: 16% sino un 14%.
+#:
+#: Estuvo en 0.95 desde el 20-08-2026, con el criterio de que "el zoom tiene que
+#: empujar el plano sin que se vea empujar". Eso vale con planos cortos. Con los
+#: planos de 7-12 s del ritmo `documental` no: un 5% repartido en nueve segundos
+#: es un 0.6% por segundo, o sea una imagen congelada, y aqui el plano es una
+#: ILUSTRACION FIJA -- entre corte y corte no se mueve nada mas.
+#:
+#: Subido a 0.7143 (escala 1.40) el 01-10-2026, elegido comparando el mismo
+#: plano a 5%, 13%, 25% y 40% con su locucion encima. Hay sitio de sobra: el
+#: render trabaja sobre un hyperframe al doble, asi que a escala 1.40 quedan
+#: 1.71 pixeles reales por pixel de salida en 1080p y no se inventa detalle.
+#:
+#: OJO al leer datos de retencion de otros canales: "cambio visual cada 20-40 s"
+#: sale de videos con PRESENTADOR o ANIMACION, donde entre cortes la imagen se
+#: mueve sola. No se traslada a un pase de ilustraciones fijas.
+CIERRE = 0.7143
 
 #: La escala que pide el motor de movimiento, que recorta 1/escala de cuadro.
 ESCALA_CERRADA = round(1.0 / CIERRE, 4)
