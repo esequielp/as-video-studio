@@ -199,9 +199,37 @@ def contexto(pid):
         return _CONTEXTOS[clave]
 
 
+#: El gestor de los trabajos que NO son de ningun proyecto -- hoy solo estudiar
+#: un video de referencia (`/api/espiar`). `GestorTrabajos` admite `estado=None`
+#: justo para esto: no hay grafo que marcar como 'ejecutando'.
+#:
+#: Vive aqui arriba, y no al lado de sus rutas, porque las rutas de
+#: /api/trabajos tienen que poder mirarlo: la pantalla sigue CUALQUIER trabajo
+#: por ese camino, y darle uno aparte seria un segundo sitio donde arreglar los
+#: fallos de seguimiento.
+GESTOR_SUELTO = GestorTrabajos()
+
+
 def _registrar_trabajo(trabajo_id, pid):
     with _LOCK:
         _INDICE_TRABAJOS[trabajo_id] = pid
+
+
+def gestor_de_trabajo(trabajo_id):
+    """El gestor que lleva ese trabajo y su contexto. -> (gestor, ctx o None)
+
+    EL SUELTO SE MIRA PRIMERO y por el id, sin indice: sus trabajos no tienen
+    proyecto, asi que no estan en `_INDICE_TRABAJOS` y `contexto_de_trabajo`
+    los daria por desconocidos.
+    """
+    tid = str(trabajo_id)
+    try:
+        GESTOR_SUELTO.estado(tid)
+        return GESTOR_SUELTO, None
+    except KeyError:
+        pass
+    ctx = contexto_de_trabajo(tid)
+    return ctx.gestor, ctx
 
 
 def contexto_de_trabajo(trabajo_id):
@@ -1637,26 +1665,27 @@ def listar_trabajos(proyecto: str = Query(default=None),
 @app.get("/api/trabajos/{tid}")
 def leer_trabajo(tid: str):
     """Estado y progreso de un trabajo."""
-    ctx = contexto_de_trabajo(tid)
+    gestor, ctx = gestor_de_trabajo(tid)
     try:
-        ficha = ctx.gestor.estado(tid)
+        ficha = gestor.estado(tid)
     except KeyError:
         raise ErrorApi(404, f"trabajo desconocido o ya olvidado: {tid}")
-    ficha["proyecto"] = ctx.id
+    ficha["proyecto"] = ctx.id if ctx is not None else None
     return ficha
 
 
 @app.post("/api/trabajos/{tid}/cancelar")
 def cancelar_trabajo(tid: str):
     """Pide la cancelacion cooperativa de un trabajo."""
-    ctx = contexto_de_trabajo(tid)
+    gestor, ctx = gestor_de_trabajo(tid)
     try:
-        pedido = ctx.gestor.cancelar(tid)
+        pedido = gestor.cancelar(tid)
     except KeyError:
         raise ErrorApi(404, f"trabajo desconocido o ya olvidado: {tid}")
-    ficha = ctx.gestor.estado(tid)
-    ctx.bitacora.anotar("cancelacion_pedida", ficha.get("paso"),
-                        {"trabajo": tid, "aceptada": pedido})
+    ficha = gestor.estado(tid)
+    if ctx is not None:
+        ctx.bitacora.anotar("cancelacion_pedida", ficha.get("paso"),
+                            {"trabajo": tid, "aceptada": pedido})
     return {"trabajo_id": tid, "cancelacion_pedida": pedido, "estado": ficha["estado"]}
 
 
@@ -1667,9 +1696,9 @@ def _sse(evento, datos):
 @app.get("/api/trabajos/{tid}/eventos")
 async def eventos_trabajo(tid: str, peticion: Request):
     """Progreso del trabajo en vivo por Server-Sent Events."""
-    ctx = contexto_de_trabajo(tid)
+    gestor, ctx = gestor_de_trabajo(tid)
     try:
-        ctx.gestor.estado(tid)
+        gestor.estado(tid)
     except KeyError:
         raise ErrorApi(404, f"trabajo desconocido o ya olvidado: {tid}")
 
@@ -1680,11 +1709,11 @@ async def eventos_trabajo(tid: str, peticion: Request):
             if await peticion.is_disconnected():
                 return
             try:
-                ficha = ctx.gestor.estado(tid)
+                ficha = gestor.estado(tid)
             except KeyError:
                 yield _sse("fin", {"id": tid, "estado": "olvidado"})
                 return
-            ficha["proyecto"] = ctx.id
+            ficha["proyecto"] = ctx.id if ctx is not None else None
             clave = (ficha["estado"], ficha["progreso"], ficha["mensaje"],
                      ficha.get("publico"))
             if clave != anterior:
@@ -9249,10 +9278,25 @@ def crear_video_light(preset_id: str, cuerpo: dict = Body(default=None)):
     # preset guarde una mas.
     aplicado = aplicar_preset_canal(proyecto.id, preset_id)
     # EL MOTOR DE IMAGEN, al nacer y solo si el ajuste se aparta de OpenAI: la
-    # misma regla que `crear_proyecto` (la calidad no, que la trae el estilo).
-    motor = AJUSTES.params_de_motor_nuevos()
-    if motor:
-        ctx.estado.actualizar_params("assets", motor)
+    # misma regla que `crear_proyecto`.
+    nuevos = dict(AJUSTES.params_de_motor_nuevos())
+    # Y LA CALIDAD, PERO SOLO SI EL ESTILO NO LA HA DEJADO PUESTA.
+    #
+    # Aqui no se escribia, con el motivo de que «la trae el estilo». No la trae:
+    # los params que un preset aplica a `assets` son las referencias, la guia y
+    # las tres duraciones, y `calidad` no esta en ninguno. Asi que el video caia
+    # en el defecto del paso --`low`, que con kie.ai es 1K-- y Configuracion no
+    # decidia nada en la UNICA pantalla que hay para crear un video.
+    #
+    # Se mira antes de escribir para no pisar al estilo el dia que un preset si
+    # la guarde, que era la intencion original.
+    if not (ctx.estado.params("assets") or {}).get("calidad"):
+        try:
+            nuevos["calidad"] = AJUSTES.leer()["calidad_imagen"]
+        except Exception:                                   # noqa: BLE001
+            pass   # un ajuste ilegible no impide crear el video
+    if nuevos:
+        ctx.estado.actualizar_params("assets", nuevos)
     avisos = _sembrar_video_light(ctx, datos)
     ctx.bitacora.anotar("video_light_creado", None, {
         "preset": preset_id, "estilo": ficha_preset.get("nombre"),
@@ -9873,6 +9917,213 @@ def fichero_web(fichero: str, peticion: Request):
                 "Cache-Control": "public, max-age=31536000, immutable",
             })
     return servir_fichero(peticion, destino)
+
+
+# ==========================================================================
+# ESPIAR: estudiar un video que ya funciona (motores/youtube, pasos/espiar.py)
+#
+# NO ES UN PASO DEL GRAFO. Lo que sale de aqui vive en el banco y se inyecta en
+# `guion.prompt_general` del proyecto que quiera usarlo, igual que la memoria
+# del canal. Meterlo en el grafo seria una migracion (ver CLAUDE.md).
+#
+# LAS METRICAS Y LA TRANSCRIPCION VIENEN POR CAMINOS DISTINTOS, y es a
+# proposito: las metricas salen de YouTube solas, pero la transcripcion se cae.
+# Medido el 01-10-2026 desde esta maquina: tras unas pocas peticiones YouTube
+# pasa de `429` a «Sign in to confirm you're not a bot», y el navegador acaba en
+# el captcha de google.com/sorry. No se recupera esperando (42 minutos de
+# esperas crecientes). Por eso `POST /api/espiar/video` acepta `transcripcion`
+# PEGADA: quien tenga la IP limpia la baja sola, y quien no, la copia del boton
+# «Mostrar transcripcion» de YouTube y la pega. El analisis es el mismo.
+# ==========================================================================
+
+def _carpeta_espiar():
+    """Donde viven la cache de YouTube y los estudios guardados."""
+    return os.path.join(PASOS_MODULOS.medios.BANCO, "espiar")
+
+
+def _motor_espiar():
+    if PASOS_MODULOS is None:
+        raise ErrorApi(503, f"los pasos no se han podido cargar: {ERROR_PASOS}")
+    return PASOS_MODULOS.medios.motor("youtube/espiar.py")
+
+
+@app.get("/api/espiar")
+def listar_estudios():
+    """Los videos de referencia ya estudiados. -> {estudios}"""
+    carpeta = os.path.join(_carpeta_espiar(), "estudios")
+    salida = []
+    if os.path.isdir(carpeta):
+        for nombre in sorted(os.listdir(carpeta)):
+            if not nombre.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(carpeta, nombre), encoding="utf-8") as fh:
+                    estudio = json.load(fh)
+            except Exception:                               # noqa: BLE001
+                continue
+            v = estudio.get("video") or {}
+            salida.append({
+                "id": v.get("id"), "titulo": v.get("titulo"), "canal": v.get("canal"),
+                "visitas": v.get("visitas"), "url": v.get("url"),
+                "miniatura": v.get("miniatura"),
+                "tiene_receta": bool(estudio.get("receta")),
+                "usd_mediano": (estudio.get("ingresos") or {}).get("usd_mediano"),
+            })
+    salida.sort(key=lambda e: e.get("visitas") or 0, reverse=True)
+    return {"estudios": salida}
+
+
+@app.get("/api/espiar/{vid}")
+def leer_estudio(vid: str):
+    """Un estudio entero, con su receta. -> dict"""
+    ruta = os.path.join(_carpeta_espiar(), "estudios", f"{vid}.json")
+    if not os.path.isfile(ruta):
+        raise ErrorApi(404, f"no hay ningún estudio de {vid}")
+    with open(ruta, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+@app.post("/api/espiar/buscar")
+def espiar_buscar(cuerpo: dict = Body(default=None)):
+    """Vídeos que responden a una búsqueda, con sus visitas. -> {videos}"""
+    datos = _cuerpo(cuerpo)
+    consulta = str(datos.get("consulta") or "").strip()
+    if not consulta:
+        raise ErrorApi(400, "hace falta 'consulta'")
+    motor = _motor_espiar()
+    try:
+        videos = motor.buscar(consulta, int(datos.get("cuantos") or 12),
+                              carpeta_cache=os.path.join(_carpeta_espiar(), "cache"))
+    except Exception as fallo:                              # noqa: BLE001
+        raise ErrorApi(502, str(fallo))
+    return {"consulta": consulta, "videos": videos}
+
+
+@app.post("/api/espiar/canal")
+def espiar_canal(cuerpo: dict = Body(default=None)):
+    """Los vídeos de un canal y CUALES se salen de su mediana. -> dict"""
+    datos = _cuerpo(cuerpo)
+    pedido = str(datos.get("canal") or "").strip()
+    if not pedido:
+        raise ErrorApi(400, "hace falta 'canal' (su URL o su @nombre)")
+    motor = _motor_espiar()
+    try:
+        return motor.canal(pedido, int(datos.get("cuantos") or 30),
+                           carpeta_cache=os.path.join(_carpeta_espiar(), "cache"))
+    except Exception as fallo:                              # noqa: BLE001
+        raise ErrorApi(502, str(fallo))
+
+
+@app.post("/api/espiar/video", status_code=202)
+def espiar_video(cuerpo: dict = Body(default=None)):
+    """Estudia un vídeo: sus números y su receta. -> trabajo
+
+    Va como TRABAJO porque la receta llama al CLI y eso pasa del minuto que
+    aguanta el proxy, igual que la ficha de publicación.
+    """
+    if PASOS_MODULOS is None:
+        raise ErrorApi(503, f"los pasos no se han podido cargar: {ERROR_PASOS}")
+    datos = _cuerpo(cuerpo)
+    url = str(datos.get("url") or "").strip()
+    if not url:
+        raise ErrorApi(400, "hace falta 'url' del vídeo")
+    pegada = str(datos.get("transcripcion") or "").strip()
+    try:
+        vid = _motor_espiar().id_de(url)
+    except Exception as fallo:                              # noqa: BLE001
+        raise ErrorApi(400, str(fallo))
+    trabajo_id = GESTOR_SUELTO.lanzar(f"espiar:{vid}", _correr_espiar, vid, pegada)
+    return {"trabajo_id": trabajo_id, "video": vid,
+            "trabajo": GESTOR_SUELTO.estado(trabajo_id),
+            "eventos": f"/api/trabajos/{trabajo_id}/eventos"}
+
+
+def _correr_espiar(avisar, vid, pegada):
+    """Baja los números, consigue la transcripción y destila la receta."""
+    motor = _motor_espiar()
+    cache = os.path.join(_carpeta_espiar(), "cache")
+
+    avisar(0.05, "mirando los números del vídeo")
+    ficha = motor.ficha(vid, carpeta_cache=cache)
+
+    avisar(0.2, "consiguiendo lo que se dice en el vídeo")
+    trozos = None
+    if pegada:
+        trozos = motor.transcripcion_pegada(pegada)
+    else:
+        try:
+            trozos = motor.transcripcion(vid, carpeta_cache=cache)
+        except Exception as fallo:                          # noqa: BLE001
+            # NO SE PIERDEN LOS NUMEROS POR NO TENER EL TEXTO. Ya han costado su
+            # espera a YouTube, y con la IP marcada volver a pedirlos no es
+            # gratis: se guarda lo que hay y se dice que falta la transcripcion.
+            estudio = PASOS_MODULOS.espiar.estudiar(ficha, [], cwd=RAIZ_ESTUDIO)
+            estudio["error_receta"] = (
+                f"sin transcripción: {fallo} — copia la del botón «Mostrar "
+                f"transcripción» de YouTube y pégala para sacar la receta.")
+            _guardar_estudio(vid, estudio)
+            return estudio
+
+    avisar(0.35, "leyendo cómo lo hicieron")
+    estudio = PASOS_MODULOS.espiar.estudiar(ficha, trozos, cwd=RAIZ_ESTUDIO)
+    _guardar_estudio(vid, estudio)
+    avisar(1.0, "listo")
+    return estudio
+
+
+def _guardar_estudio(vid, estudio):
+    carpeta = os.path.join(_carpeta_espiar(), "estudios")
+    os.makedirs(carpeta, exist_ok=True)
+    tmp = os.path.join(carpeta, f"{vid}.json.tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(estudio, fh, ensure_ascii=False, indent=1)
+    os.replace(tmp, os.path.join(carpeta, f"{vid}.json"))
+
+
+@app.post("/api/proyectos/{pid}/espiar/{vid}/aplicar")
+def aplicar_receta(pid: str, vid: str):
+    """Mete la receta de un vídeo de referencia en el guion de este proyecto.
+
+    EN `prompt_general` Y NO EN EL MATERIAL. El material son los HECHOS de TU
+    vídeo; esto es COMO contarlos. Mezclarlos haria que el guion hablara del
+    video ajeno.
+
+    Y lo que viaja es SOLO el parrafo de instrucciones: ni la transcripcion, ni
+    el titulo, ni una frase del otro video.
+    """
+    if PASOS_MODULOS is None:
+        raise ErrorApi(503, f"los pasos no se han podido cargar: {ERROR_PASOS}")
+    ruta = os.path.join(_carpeta_espiar(), "estudios", f"{vid}.json")
+    if not os.path.isfile(ruta):
+        raise ErrorApi(404, f"no hay ningún estudio de {vid}")
+    with open(ruta, encoding="utf-8") as fh:
+        estudio = json.load(fh)
+    receta = PASOS_MODULOS.espiar.para_el_guion(estudio)
+    if not receta:
+        raise ErrorApi(409, "ese estudio no tiene receta todavía: le falta la "
+                            "transcripción")
+    ctx = contexto(pid)
+    actual = str((ctx.estado.params("guion") or {}).get("prompt_general") or "").strip()
+    # SE AÑADE, NO SE PISA: ahi puede vivir ya una indicacion de este video.
+    nuevo = (actual + "\n\n" + receta).strip() if actual else receta
+
+    # Y SE AVISA SI ESTO CUESTA DINERO. `prompt_general` entra en la firma del
+    # guion, asi que aplicar una receta a un video YA ESCRITO deja obsoleto el
+    # guion y, en cascada, la voz y las imagenes -- que ya estan pagadas. No se
+    # impide (quien lo pide sabe lo que quiere), pero no puede pasar en
+    # silencio: es la regla 1 de CLAUDE.md vista desde el otro lado.
+    tenia_guion = bool(ctx.proyecto.version_activa("guion"))
+    ctx.estado.actualizar_params("guion", {"prompt_general": nuevo})
+    ctx.bitacora.anotar("receta_aplicada", None,
+                        {"video": vid, "habia_guion": tenia_guion})
+    return {
+        "aplicado": True, "video": vid, "prompt_general": nuevo,
+        "deja_obsoleto": tenia_guion,
+        "aviso": ("Este proyecto ya tenía el guion escrito: al cambiar las "
+                  "indicaciones, el guion queda obsoleto y con él la voz y las "
+                  "imágenes, que habría que volver a pagar. La receta sirve "
+                  "mejor ANTES de escribir el guion." if tenia_guion else ""),
+    }
 
 
 # ------------------------------------------------------------------------ main

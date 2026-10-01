@@ -77,6 +77,10 @@ from . import presets_light  # noqa: E402,F401
 from . import publicacion  # noqa: E402,F401
 # y miniatura (las tres propuestas de miniatura), que usa la ficha y p6
 from . import miniatura  # noqa: E402,F401
+# espiar (la receta de un video de referencia) tampoco es un paso del grafo: no
+# produce nada de lo que dependa otro paso. Solo necesita el CLI, asi que va al
+# final y un fallo suyo no se lleva por delante el resto del paquete.
+from . import espiar  # noqa: E402,F401
 
 MODULOS = {
     "ingesta": p1_ingesta,
@@ -107,5 +111,5 @@ __all__ = ["catalogo_visual", "conservar", "repaso",
            "presets_light", "recetas", "sonido", "tipografia", "subtitulos", "tono", "transiciones",
            "voz_descrita",
            "p6_assets", "p7_callouts", "p8_render",
-           "variedad", "publicacion", "miniatura",
+           "variedad", "publicacion", "miniatura", "espiar",
            "MODULOS", "modulo_de"]
