@@ -1,53 +1,68 @@
 {
-  "version": 1,
-  "moneda": "USD",
-  "actualizado": "2026-08-13T12:04:49",
-  "openai": {
-    "modelo": "gpt-image-2",
-    "usd_por_token": {
-      "entrada_texto": 5e-06,
-      "entrada_imagen": 8e-06,
-      "salida": 3e-05,
-      "nota": "Precios de gpt-image-2 por token (5, 8 y 30 $ por millon). Aqui esta el grueso del gasto de este pipeline y hasta ahora no se cobraba: a cada plano se le adjuntan las referencias de estilo, las de reparto y las dos de continuidad, y eso son unos 6.700 tokens de ENTRADA por imagen. En una tanda de 174 planos fueron 1,17 millones de tokens (unos 9,4 $) contra 1,04 $ de imagenes: el medidor ensenaba la decima parte. La entrada que la API no desglosa se tarifa como imagen, que es el precio mas alto de los dos: mas vale pasarse por arriba que volver a ensenar un gasto que no es."
-    },
-    "usd_por_imagen": {
-      "1536x1024": {
-        "low": 0.006,
-        "medium": 0.041,
-        "high": 0.165
-      },
-      "1024x1024": {
-        "low": 0.006,
-        "medium": 0.053,
-        "high": 0.211
-      },
-      "nota": "Respaldo, no la via principal. Solo cubre la imagen DEVUELTA, que es la parte pequena, y solo se usa cuando la API no devuelve 'usage' y por tanto no hay tokens que tarifar. Cuando hay usage manda usd_por_token, y las dos no se suman nunca: la imagen devuelta ya son los tokens de salida."
-    }
+ "version": 1,
+ "moneda": "USD",
+ "actualizado": "2026-08-13T12:04:49",
+ "openai": {
+  "modelo": "gpt-image-2",
+  "usd_por_token": {
+   "entrada_texto": 5e-06,
+   "entrada_imagen": 8e-06,
+   "salida": 3e-05,
+   "nota": "Precios de gpt-image-2 por token (5, 8 y 30 $ por millon). Aqui esta el grueso del gasto de este pipeline y hasta ahora no se cobraba: a cada plano se le adjuntan las referencias de estilo, las de reparto y las dos de continuidad, y eso son unos 6.700 tokens de ENTRADA por imagen. En una tanda de 174 planos fueron 1,17 millones de tokens (unos 9,4 $) contra 1,04 $ de imagenes: el medidor ensenaba la decima parte. La entrada que la API no desglosa se tarifa como imagen, que es el precio mas alto de los dos: mas vale pasarse por arriba que volver a ensenar un gasto que no es."
   },
-  "kie": {
-    "usd_por_credito": 0.005,
-    "creditos_por_imagen": {
-      "google/nano-banana-edit": 4,
-      "bytedance/seedream-v4-edit": 3.5,
-      "nano-banana-pro": {
-        "1K": 18,
-        "2K": 18,
-        "4K": 24
-      }
-    },
-    "verificado": false,
-    "medido": "30-09-2026: una imagen de google/nano-banana (texto a imagen, sin referencias) descontó 4 créditos del saldo (1003,16 -> 999,16), lo que dice esta tabla. Falta medir los modelos de edición CON referencias, Seedream y Nano Banana Pro, y el precio real del crédito.",
-    "nota": "kie.ai cobra en CREDITOS y por imagen, lleve las referencias que lleve: aqui no hay tokens de entrada, y ese es todo el ahorro frente a gpt-image-2 (donde las referencias son el 87 % del gasto). Los creditos por modelo se escribieron SIN poder abrir kie.ai/pricing: 'verificado' pasa a true cuando herramientas/probar_kie.py los compare con lo que la cuenta descuenta de verdad. Un modelo con creditos por resolucion (1K/2K/4K) cobra segun la calidad pedida (low/medium/high, ver motores/imagen_kie/modelos.json)."
-  },
-  "tts": {
-    "proveedor": "cartesia",
-    "modelo": "sonic-3",
-    "usd_por_caracter": 6.5e-05,
-    "plan": "Pro con overages",
-    "nota": "Plan Pro (5 $/mes, 100.000 creditos incluidos) con overages a 65 $ por millon de creditos. En Sonic, 1 credito = 1 caracter, asi que el caracter de mas cuesta 0,000065 $. Se anota el coste MARGINAL a proposito: los 100.000 creditos incluidos ya estan pagados cada mes, y prorratear los 5 $ haria que el mismo video costara distinto segun cuanto se hubiera usado antes. Los eventos anotados antes de fijar esta tarifa no se reescriben: el historico anterior sigue sin importe."
-  },
-  "claude_cli": {
-    "suma_al_total": false,
-    "nota": "Va contra la suscripcion, no contra un contador con precio por llamada: se miden tokens y nunca dolares."
+  "usd_por_imagen": {
+   "1536x1024": {
+    "low": 0.006,
+    "medium": 0.041,
+    "high": 0.165
+   },
+   "1024x1024": {
+    "low": 0.006,
+    "medium": 0.053,
+    "high": 0.211
+   },
+   "nota": "Respaldo, no la via principal. Solo cubre la imagen DEVUELTA, que es la parte pequena, y solo se usa cuando la API no devuelve 'usage' y por tanto no hay tokens que tarifar. Cuando hay usage manda usd_por_token, y las dos no se suman nunca: la imagen devuelta ya son los tokens de salida."
   }
+ },
+ "kie": {
+  "usd_por_credito": 0.005,
+  "creditos_por_imagen": {
+   "google/nano-banana-edit": 4,
+   "bytedance/seedream-v4-edit": 3.5,
+   "nano-banana-pro": {
+    "1K": 18,
+    "2K": 18,
+    "4K": 24
+   },
+   "gpt-image-2-image-to-image": {
+    "1K": 6,
+    "2K": 10,
+    "4K": 16
+   },
+   "seedream/5-flash-image-to-image": {
+    "1K": 3.24,
+    "1.5K": 3.24,
+    "2K": 3.24
+   },
+   "gpt-image-2-5-flare-image-to-image": {
+    "1K": 6,
+    "2K": 10,
+    "4K": 16
+   }
+  },
+  "verificado": true,
+  "medido": "29-09-2026: 12 imagenes de google/nano-banana (texto a imagen, sin referencias, calidad low) descontaron 48 creditos (999,16 -> 951,16), exactamente 4 cada una, 0% de varianza. gpt-image-2-image-to-image a 1K medido tambien: 2 imagenes, 6 creditos exactos. 30-09-2026: CONFIRMADO EL 2K. Cuatro tandas de moodboard (6 laminas cada una, gpt-image-2 CON referencias, calidad medium = 2K) descontaron 60 creditos cada tanda: 447,16 -> 387,16 -> 327,16 -> 267,16 -> 207,16. Son 10 creditos por imagen exactos, 0% de varianza sobre 24 llamadas, y confirma que el precio NO sube por llevar referencias. Sigue sin medir: 4K (16), los modelos de edicion de Seedream y Nano Banana Pro, y si el precio de nano-banana cambia con medium/high.",
+  "nota": "kie.ai cobra en CREDITOS y por imagen, lleve las referencias que lleve: aqui no hay tokens de entrada, y ese es todo el ahorro frente a llamar a OpenAI DIRECTAMENTE (donde las referencias son el 87 % del gasto, ver bloque 'openai' de arriba). OJO a no confundir los dos: 'gpt-image-2-image-to-image' de AQUI ABAJO es el mismo modelo de OpenAI revendido POR kie.ai a tarifa plana (6 creditos = 0,03 $ a 1K, sin recargo por referencias) -- mas caro que nano-banana pero sin el 87 % de sobrecoste de ir directo. Los creditos por modelo se escribieron SIN poder abrir kie.ai/pricing salvo donde el 'medido' de arriba diga lo contrario: 'verificado' pasa a true cuando herramientas/probar_kie.py los compare con lo que la cuenta descuenta de verdad. Un modelo con creditos por resolucion (1K/2K/4K) cobra segun la calidad pedida (low/medium/high, ver motores/imagen_kie/modelos.json)."
+ },
+ "tts": {
+  "proveedor": "cartesia",
+  "modelo": "sonic-3",
+  "usd_por_caracter": 6.5e-05,
+  "plan": "Pro con overages",
+  "nota": "Plan Pro (5 $/mes, 100.000 creditos incluidos) con overages a 65 $ por millon de creditos. En Sonic, 1 credito = 1 caracter, asi que el caracter de mas cuesta 0,000065 $. Se anota el coste MARGINAL a proposito: los 100.000 creditos incluidos ya estan pagados cada mes, y prorratear los 5 $ haria que el mismo video costara distinto segun cuanto se hubiera usado antes. Los eventos anotados antes de fijar esta tarifa no se reescriben: el historico anterior sigue sin importe."
+ },
+ "claude_cli": {
+  "suma_al_total": false,
+  "nota": "Va contra la suscripcion, no contra un contador con precio por llamada: se miden tokens y nunca dolares."
+ }
 }

@@ -1,46 +1,136 @@
 {
-  "version": 1,
-  "nota": "Los modelos de imagen de kie.ai que sabe llamar motores/imagen_kie/imagen.py. Es DATO y no codigo a proposito: la API de kie.ai es de un intermediario y cambia de nombres, de campos y de precios sin avisar. Todo lo que hay aqui se escribio sin poder abrir docs.kie.ai desde el entorno donde se programo, asi que cada modelo lleva 'verificado': false hasta que la Fase 0 (herramientas/probar_kie.py) lo compruebe contra la cuenta real. Los precios NO viven aqui: viven en tarifas.json (bloque 'kie'), que es la unica tabla de precios del Estudio.",
-  "por_defecto": "google/nano-banana-edit",
-  "medido": "30-09-2026, contra la cuenta real: createTask con model 'google/nano-banana' e input {prompt, image_size '3:2', output_format 'png'} se acepta y sale en ~57 s; recordInfo devuelve el resultado en resultJson.resultUrls, servido desde tempfile.aiquickdraw.com. Falta: los modelos de edicion con referencias (necesitan la subida a kieai.redpandaai.co).",
-  "dominios": "api.kie.ai (tareas y saldo), kieai.redpandaai.co (subida de referencias), tempfile.aiquickdraw.com (descarga del resultado): los tres tienen que estar permitidos en la red del servidor.",
-  "sin_referencias": "Cada modelo de edicion necesita al menos una imagen. Para dibujar SIN ninguna (las laminas de un estilo descrito, pasos/moodboard.py) se usa el modelo de 'sin_referencias' de su ficha, con los mismos campos menos el de las referencias.",
-  "modelos": {
-    "google/nano-banana-edit": {
-      "nombre": "Nano Banana (edicion con referencias)",
-      "campo_referencias": "image_urls",
-      "max_referencias": 10,
-      "campo_proporcion": "image_size",
-      "proporciones": {"apaisado": "3:2", "vertical": "2:3", "cuadrado": "1:1"},
-      "campo_resolucion": null,
-      "resoluciones": {},
-      "fijos": {"output_format": "png"},
-      "sin_referencias": "google/nano-banana",
-      "verificado": false
-    },
-    "bytedance/seedream-v4-edit": {
-      "nombre": "Seedream 4 (edicion con referencias)",
-      "campo_referencias": "image_urls",
-      "max_referencias": 10,
-      "campo_proporcion": "image_size",
-      "proporciones": {"apaisado": "landscape_4_3", "vertical": "portrait_4_3", "cuadrado": "square_hd"},
-      "campo_resolucion": "image_resolution",
-      "resoluciones": {"low": "1K", "medium": "2K", "high": "4K"},
-      "fijos": {"max_images": 1},
-      "sin_referencias": "bytedance/seedream-v4-text-to-image",
-      "verificado": false
-    },
-    "nano-banana-pro": {
-      "nombre": "Nano Banana Pro",
-      "campo_referencias": "image_input",
-      "max_referencias": 8,
-      "campo_proporcion": "aspect_ratio",
-      "proporciones": {"apaisado": "3:2", "vertical": "2:3", "cuadrado": "1:1"},
-      "campo_resolucion": "resolution",
-      "resoluciones": {"low": "1K", "medium": "2K", "high": "4K"},
-      "fijos": {"output_format": "png"},
-      "sin_referencias": "nano-banana-pro",
-      "verificado": false
-    }
+ "version": 1,
+ "nota": "Los modelos de imagen de kie.ai que sabe llamar motores/imagen_kie/imagen.py. Es DATO y no codigo a proposito: la API de kie.ai es de un intermediario y cambia de nombres, de campos y de precios sin avisar. Todo lo que hay aqui se escribio sin poder abrir docs.kie.ai desde el entorno donde se programo, asi que cada modelo lleva 'verificado': false hasta que la Fase 0 (herramientas/probar_kie.py) lo compruebe contra la cuenta real. Los precios NO viven aqui: viven en tarifas.json (bloque 'kie'), que es la unica tabla de precios del Estudio.",
+ "por_defecto": "google/nano-banana-edit",
+ "medido": "29-09-2026, contra la cuenta real: createTask con model 'google/nano-banana' e input {prompt, image_size '3:2', output_format 'png'} se acepta y sale en 20-73 s (12 llamadas, media 36 s); recordInfo devuelve el resultado en resultJson.resultUrls, servido desde tempfile.aiquickdraw.com. Un 500 Internal Error salio una vez de doce y se resolvio solo reintentando el mismo prompt -- no parecio ser de moderacion de contenido. Precio confirmado: 4 creditos por imagen, 0% de varianza. Falta: los modelos de edicion CON referencias (necesitan la subida a kieai.redpandaai.co), Seedream y Nano Banana Pro.",
+ "dominios": "api.kie.ai (tareas y saldo), kieai.redpandaai.co (subida de referencias), tempfile.aiquickdraw.com (descarga del resultado): los tres tienen que estar permitidos en la red del servidor.",
+ "sin_referencias": "Cada modelo de edicion necesita al menos una imagen. Para dibujar SIN ninguna (las laminas de un estilo descrito, pasos/moodboard.py) se usa el modelo de 'sin_referencias' de su ficha, con los mismos campos menos el de las referencias.",
+ "modelos": {
+  "google/nano-banana-edit": {
+   "nombre": "Nano Banana (edicion con referencias)",
+   "campo_referencias": "image_urls",
+   "max_referencias": 10,
+   "campo_proporcion": "image_size",
+   "proporciones": {
+    "apaisado": "3:2",
+    "vertical": "2:3",
+    "cuadrado": "1:1"
+   },
+   "campo_resolucion": null,
+   "resoluciones": {},
+   "fijos": {
+    "output_format": "png"
+   },
+   "sin_referencias": "google/nano-banana",
+   "verificado": false
+  },
+  "bytedance/seedream-v4-edit": {
+   "nombre": "Seedream 4 (edicion con referencias)",
+   "campo_referencias": "image_urls",
+   "max_referencias": 10,
+   "campo_proporcion": "image_size",
+   "proporciones": {
+    "apaisado": "landscape_4_3",
+    "vertical": "portrait_4_3",
+    "cuadrado": "square_hd"
+   },
+   "campo_resolucion": "image_resolution",
+   "resoluciones": {
+    "low": "1K",
+    "medium": "2K",
+    "high": "4K"
+   },
+   "fijos": {
+    "max_images": 1
+   },
+   "sin_referencias": "bytedance/seedream-v4-text-to-image",
+   "verificado": false
+  },
+  "nano-banana-pro": {
+   "nombre": "Nano Banana Pro",
+   "campo_referencias": "image_input",
+   "max_referencias": 8,
+   "campo_proporcion": "aspect_ratio",
+   "proporciones": {
+    "apaisado": "3:2",
+    "vertical": "2:3",
+    "cuadrado": "1:1"
+   },
+   "campo_resolucion": "resolution",
+   "resoluciones": {
+    "low": "1K",
+    "medium": "2K",
+    "high": "4K"
+   },
+   "fijos": {
+    "output_format": "png"
+   },
+   "sin_referencias": "nano-banana-pro",
+   "verificado": false
+  },
+  "gpt-image-2-image-to-image": {
+   "nombre": "GPT Image 2 (edicion con referencias)",
+   "campo_referencias": "input_urls",
+   "max_referencias": 16,
+   "campo_proporcion": "aspect_ratio",
+   "proporciones": {
+    "apaisado": "16:9",
+    "vertical": "9:16",
+    "cuadrado": "1:1"
+   },
+   "campo_resolucion": "resolution",
+   "resoluciones": {
+    "low": "1K",
+    "medium": "2K",
+    "high": "4K"
+   },
+   "fijos": {},
+   "sin_referencias": "gpt-image-2-text-to-image",
+   "verificado": true,
+   "medido": "29-09-2026: contrato tomado de docs.kie.ai/market/gpt/gpt-image-2-text-to-image y .../gpt-image-2-image-to-image. Probado contra la cuenta real con herramientas/probar_kie.py (2 imagenes, texto a imagen, calidad low): acepta el contrato tal cual, 6 creditos por imagen exactos, 67 s de media (mas lento que nano-banana). Sin probar: con referencias de verdad (image-to-image), y a resolucion medium/high.",
+   "nota_proporciones": "16:9 y 9:16 son EXACTAMENTE el fotograma del video (1920x1080 / 1080x1920), asi que no se recorta nada. Con 3:2 y 2:3 --lo que ofrece OpenAI y lo que habia aqui-- el render tiraba el 15 % del alto (o del ancho en vertical) de cada imagen pagada. Verificado el 30-09-2026 contra docs.kie.ai: aspect_ratio admite auto, 1:1, 3:2, 2:3, 4:3, 3:4, 5:4, 4:5, 16:9, 9:16, 2:1, 1:2, 3:1, 1:3, 21:9, 9:21; a 2K NO valen 5:4, 4:5, 3:1, 1:3 ni 9:21, y 16:9 no esta en esa lista. OJO: con aspect_ratio 'auto' o sin mandarlo, la API devuelve SOLO 1K aunque se pida 2K -- por eso nunca se omite."
+  },
+  "seedream/5-flash-image-to-image": {
+   "nombre": "Seedream 5 Flash (edicion con referencias)",
+   "campo_referencias": "image_urls",
+   "max_referencias": 10,
+   "campo_proporcion": "aspect_ratio",
+   "proporciones": {
+    "apaisado": "16:9",
+    "vertical": "9:16",
+    "cuadrado": "1:1"
+   },
+   "campo_resolucion": "size",
+   "resoluciones": {
+    "low": "1K",
+    "medium": "2K",
+    "high": "2K"
+   },
+   "fijos": {},
+   "sin_referencias": "seedream/5-flash-text-to-image",
+   "verificado": true,
+   "nota": "Campos leidos de docs.kie.ai el 30-09-2026. OJO A TRES COSAS: el campo de resolucion se llama `size` y NO `resolution`; no hay 4K, asi que `high` cae tambien en 2K; y `aspect_ratio` es OBLIGATORIO. La tarifa es PLANA --3,24 creditos a 1K, 1.5K y 2K por igual--, un tercio de lo que cuesta gpt-image-2 a 2K. Falta medir si cobra aparte por cada imagen de referencia: la tarifa de Seedream 5 PRO trae una linea de 0,5 creditos por imagen de entrada a partir de la primera, y si Flash hace lo mismo el ahorro se encoge."
+  },
+  "gpt-image-2-5-flare-image-to-image": {
+   "nombre": "GPT Image 2.5 Flare (edicion con referencias)",
+   "campo_referencias": "input_urls",
+   "max_referencias": 16,
+   "campo_proporcion": "aspect_ratio",
+   "proporciones": {
+    "apaisado": "16:9",
+    "vertical": "9:16",
+    "cuadrado": "1:1"
+   },
+   "campo_resolucion": "resolution",
+   "resoluciones": {
+    "low": "1K",
+    "medium": "2K",
+    "high": "4K"
+   },
+   "fijos": {},
+   "sin_referencias": "gpt-image-2-5-flare-text-to-image",
+   "verificado": true,
+   "nota": "Mismos campos y MISMO PRECIO que gpt-image-2 (6/10/16 creditos para 1K/2K/4K), leidos de docs.kie.ai el 30-09-2026. Si dibuja mejor, es una mejora que no cuesta nada."
   }
+ }
 }

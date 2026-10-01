@@ -91,11 +91,20 @@ Lo que no se deduce leyendo el código (el plan y las cuentas, en
   llamada (`max_referencias` en `modelos.json`), el prompt las cita por
   POSICIÓN y se escribe después de la lista: `_referencias_para_el_motor` recorta
   por papel ANTES de `_prompt_completo`. El motor levanta si le llegan de más.
-- **`modelos.json` y el bloque `kie` de `tarifas.json` están SIN VERIFICAR**
-  (`"verificado": false`): se escribieron sin poder abrir docs.kie.ai. Antes de
-  la primera tanda de verdad, `herramientas/probar_kie.py --saldo` y luego 20
-  planos de un proyecto real con dos modelos: dice lo que cobra cada imagen,
-  mirando el saldo antes y después.
+- **`modelos.json` y el bloque `kie` de `tarifas.json` YA ESTÁN VERIFICADOS**
+  (30-09-2026). docs.kie.ai se abre, y la tarifa está medida contra la cuenta:
+  nano-banana 4 créditos y gpt-image-2 6/10/16 (1K/2K/4K), con 0 % de varianza
+  sobre 36 llamadas. Y lo que de verdad importaba: **kie.ai cobra por imagen,
+  lleve las referencias que lleve** — las 24 llamadas CON referencias costaron
+  lo mismo que las que no las llevaban. Sigue sin medir 4K, los modelos de
+  edición de Seedream y Nano Banana Pro, y si nano-banana cambia con la calidad.
+- **`aspect_ratio` nunca se omite, y no se pone `auto`.** La API devuelve SOLO
+  1K cuando falta o vale `auto`, aunque pidas 2K — y la pagas igual. Por eso
+  `proporciones` lleva **`16:9` y `9:16`**, que además son el fotograma exacto
+  del vídeo: con los `3:2` y `2:3` de OpenAI, que es lo que había, el render
+  tiraba el 15 % de cada imagen al recortar. La proporción NO entra en la firma
+  (`_huella_de_imagen` guarda `"apaisado"`, no el valor), así que cambiarla no
+  deja obsoleto nada.
 - **La memoria del canal NO es un param** (`pasos/variedad.py`). Vive en
   `_memoria_canal.json`, en la carpeta de los proyectos, y entra en la
   INSTRUCCIÓN del guion, no en su firma: si fuera un param, escribir un vídeo
@@ -339,3 +348,8 @@ Tres cosas que ahorran perseguir fallos que no existen:
   parte y lo dice. No es un fallo.
 - `prueba_login` llama al CLI de Claude de verdad. Es la única que comprueba que
   el CLI sigue dejando entrar sin terminal y sin abrir un navegador.
+- **Y por eso se corre con `app.py` PARADO.** Cuenta los procesos de Edge antes
+  y después de llamar al CLI, y el Estudio rasteriza con Edge: basta abrir la
+  interfaz mientras corre la suite para que salga «NO se ha abierto ningún
+  navegador (Edge antes 9, después 10)» y la suite entera se dé por roja. No
+  hay nada que arreglar — la misma prueba a solas pasa. Pasó el 30-09-2026.

@@ -2264,16 +2264,24 @@ function repintarClaves() {
 }
 
 function pintarConfig() {
-  const caja = vaciar($('#cuerpo-config'));
+  const nodo = $('#cuerpo-config');
+  // `vaciar` quita todos los hijos: el navegador le pone scrollTop a 0 en ese
+  // instante y ya no lo recupera solo. Con `latirCLI` repintando cada 2s
+  // mientras una cuenta espera el codigo, sin esto el panel saltaba arriba
+  // en mitad de pegarlo.
+  const scroll = nodo.scrollTop;
+  const caja = vaciar(nodo);
   const vista = estadoConfig();
   if (vista.error) {
     caja.appendChild(h('div', { clase: 'vacio' },
       'esta parte necesita una versión más nueva del servidor'));
+    caja.scrollTop = scroll;
     return;
   }
   const ficha = vista.ficha;
   if (!ficha) {
     caja.appendChild(h('div', { clase: 'cargando' }, 'leyendo las claves…'));
+    caja.scrollTop = scroll;
     return;
   }
   caja.appendChild(bloquePruebaClaves());
@@ -2293,6 +2301,7 @@ function pintarConfig() {
     `Se guardan en ${ficha.fichero}, fuera del repositorio. No hace falta `
     + 'reiniciar: el motor de imagen recoge las cuentas nuevas solo, y el CLI '
     + 'lee la suya en cada llamada.'));
+  caja.scrollTop = scroll;
 }
 
 async function cargarAjustes() {
@@ -2333,6 +2342,13 @@ async function guardarCalidadImagen(calidad) {
  * Cambiarlo no toca ni un video hecho: la calidad entra en la firma de cada
  * imagen, asi que un cambio retroactivo las dejaria todas obsoletas y
  * regenerarlas se paga. */
+//: A que resolucion sale cada calidad con kie.ai, para poder decirlo al lado del
+//: precio. Importa porque el video se monta a 1920x1080 CON ZOOM: 1K sale a
+//: 1536x1024 y hay que AMPLIARLA x1,3 para llenar el fotograma, mientras que 2K
+//: sale a 3072x2048 y se reduce. `low` no es «un poco peor»: es la unica que
+//: obliga a interpolar, y se nota justo en los estilos de linea fina.
+const RESOLUCION_KIE = { low: '1K', medium: '2K', high: '4K' };
+
 function seccionCalidadImagen() {
   const vista = estadoConfig();
   const datos = vista.ajustes;
@@ -2346,18 +2362,42 @@ function seccionCalidadImagen() {
     return caja;
   }
 
-  const base = datos.costes[0] || {};
-  const porcentaje = base.usd_total
-    ? Math.round(100 * base.usd_referencias / base.usd_total) : 0;
-  caja.appendChild(h('div', { clase: 'pista' },
-    'Lo que se ve aqui NO es el precio de OpenAI: es lo que cuesta el plano '
-    + 'entero. A cada imagen se le adjuntan sus referencias de estilo, reparto y '
-    + `continuidad, y esas se pagan aparte — en la calidad baja son el ${porcentaje} % `
-    + 'del gasto. Por eso subir de calidad cuesta bastante menos de lo que '
-    + 'parece si solo se mira la tabla de precios.'));
+  // LOS PRECIOS SON LOS DEL MOTOR QUE ESTE PUESTO, y no son el mismo numero.
+  // `datos.costes` es la tarifa de OpenAI, donde las referencias se pagan como
+  // tokens de entrada y son el 87 % del gasto en calidad baja. kie.ai cobra por
+  // IMAGEN lleve las referencias que lleve (medido el 30-09-2026: 24 llamadas
+  // con referencias, 10 creditos clavados cada una), asi que pintar aqui la
+  // tabla de OpenAI con el motor en kie enseñaba 0,047 $ donde se pagan 0,030 $
+  // y cobraba por unas referencias que son gratis. Es la pantalla con la que se
+  // elige cuanto gastar: tiene que decir lo que de verdad va a costar.
+  const esKie = datos.ajustes.motor_imagen === 'kie';
+  const filas = esKie
+    ? (datos.calidades || []).map(calidad => ({
+      calidad,
+      usd_total: (datos.costes_kie || {})[calidad],
+    })).filter(f => f.usd_total !== null && f.usd_total !== undefined)
+    : datos.costes;
+
+  if (esKie) {
+    caja.appendChild(h('div', { clase: 'pista' },
+      'Con kie.ai se paga POR IMAGEN, lleve las referencias que lleve: las de '
+      + 'estilo, reparto y continuidad no cuestan nada aparte. Ese es todo el '
+      + 'ahorro frente a llamar a OpenAI directamente, donde esas referencias '
+      + 'son el grueso de la factura.'));
+  } else {
+    const base = datos.costes[0] || {};
+    const porcentaje = base.usd_total
+      ? Math.round(100 * base.usd_referencias / base.usd_total) : 0;
+    caja.appendChild(h('div', { clase: 'pista' },
+      'Lo que se ve aqui NO es el precio de OpenAI: es lo que cuesta el plano '
+      + 'entero. A cada imagen se le adjuntan sus referencias de estilo, reparto y '
+      + `continuidad, y esas se pagan aparte — en la calidad baja son el ${porcentaje} % `
+      + 'del gasto. Por eso subir de calidad cuesta bastante menos de lo que '
+      + 'parece si solo se mira la tabla de precios.'));
+  }
 
   const elegida = datos.ajustes.calidad_imagen;
-  datos.costes.forEach(fila => {
+  filas.forEach(fila => {
     const puesta = fila.calidad === elegida;
     caja.appendChild(h('button', {
       clase: 'fila-calidad' + (puesta ? ' elegida' : ''),
@@ -2368,13 +2408,18 @@ function seccionCalidadImagen() {
     },
       h('span', { clase: 'nombre' }, fila.calidad),
       h('span', { clase: 'precio' },
-        `${fila.usd_total.toFixed(3)} $ por imagen`),
-      h('span', { clase: 'meta desglose' },
-        `${fila.usd_imagen.toFixed(3)} la imagen + ${fila.usd_referencias.toFixed(3)} `
-        + 'las referencias'),
-      h('span', { clase: 'meta veces' }, fila.veces_total > 1
-        ? `×${fila.veces_total} de coste real, no ×${fila.veces_imagen}`
-        : 'la mas barata')));
+        `${Number(fila.usd_total).toFixed(3)} $ por imagen`),
+      h('span', { clase: 'meta desglose' }, esKie
+        ? `${RESOLUCION_KIE[fila.calidad] || ''} · referencias incluidas`
+        : `${fila.usd_imagen.toFixed(3)} la imagen + ${fila.usd_referencias.toFixed(3)} `
+          + 'las referencias'),
+      h('span', { clase: 'meta veces' }, esKie
+        ? (fila.calidad === 'low'
+          ? 'se amplia x1,3 para llenar el vídeo'
+          : 'entra entera en el vídeo, sin ampliar')
+        : (fila.veces_total > 1
+          ? `×${fila.veces_total} de coste real, no ×${fila.veces_imagen}`
+          : 'la mas barata'))));
   });
 
   caja.appendChild(h('div', { clase: 'meta' },
@@ -2515,9 +2560,10 @@ function seccionKie(ficha) {
     caja.appendChild(h('div', { clase: 'meta' },
       precio === null || precio === undefined
         ? 'Sin tarifa para este modelo en tarifas.json: el coste saldrá «sin tarifa».'
-        : `${Number(precio).toFixed(3)} $ por imagen en calidad ${calidad}, `
-          + 'referencias incluidas (tarifa sin verificar: compruébala con '
-          + 'herramientas/probar_kie.py).'));
+        : `${Number(precio).toFixed(3)} $ por imagen en calidad ${calidad} `
+          + `(${RESOLUCION_KIE[calidad] || '?'}), referencias incluidas. `
+          + 'Tarifa medida contra la cuenta real; el saldo se comprueba con '
+          + 'herramientas/probar_kie.py --saldo.'));
   }
   return caja;
 }
@@ -10712,7 +10758,7 @@ function campoArea(etiqueta, valor, alCambiar, pista, foco) {
  * cerrar sin leer.
  */
 
-const INICIO = { abierta: false, paso: 0, arrancando: false, accesoFallido: '' };
+const INICIO = { abierta: false, paso: 0, arrancando: false, accesoFallido: '', ultimoPaso: -1 };
 
 /* Las paradas de la guía. Cada una pinta su cuerpo con lo que haya cargado en
    `estadoConfig()` (las claves y las cuentas del CLI, que son las mismas que
@@ -10721,9 +10767,10 @@ const TARJETAS_INICIO = [
   { id: 'bienvenida', titulo: 'Bienvenido a AS Video Studio', pinta: tarjetaBienvenidaInicio },
   { id: 'claude', titulo: '1 · Tu cuenta de Claude', pinta: tarjetaClaudeInicio },
   { id: 'openai', titulo: '2 · La clave de OpenAI (imágenes)', pinta: tarjetaOpenAIInicio },
-  { id: 'cartesia', titulo: '3 · La clave de Cartesia (voz)', pinta: tarjetaCartesiaInicio },
-  { id: 'jamendo', titulo: '4 · La clave de Jamendo (música, opcional)', pinta: tarjetaJamendoInicio },
-  { id: 'freesound', titulo: '5 · La clave de FreeSound (efectos, opcional)', pinta: tarjetaFreeSoundInicio },
+  { id: 'kie', titulo: '3 · kie.ai — imágenes más baratas (opcional)', pinta: tarjetaKieInicio },
+  { id: 'cartesia', titulo: '4 · La clave de Cartesia (voz)', pinta: tarjetaCartesiaInicio },
+  { id: 'jamendo', titulo: '5 · La clave de Jamendo (música, opcional)', pinta: tarjetaJamendoInicio },
+  { id: 'freesound', titulo: '6 · La clave de FreeSound (efectos, opcional)', pinta: tarjetaFreeSoundInicio },
   { id: 'listo', titulo: 'Todo listo', pinta: tarjetaFinalInicio },
 ];
 
@@ -10767,8 +10814,15 @@ function irAInicio(paso) {
 function pintarInicio() {
   const capa = $('#inicio');
   if (!capa || !INICIO.abierta) return;
-  const cuadro = vaciar(capa.querySelector('.cuadro'));
+  const nodo = capa.querySelector('.cuadro');
   const n = INICIO.paso;
+  // Igual que en Configuracion: `latirCLI` repinta este mismo paso cada 2s
+  // mientras la tarjeta de Claude espera el codigo, y `vaciar` le resetea el
+  // scroll a 0. Solo se conserva si es UN REPINTADO del mismo paso: cambiar
+  // de paso sí tiene que empezar arriba.
+  const scroll = INICIO.ultimoPaso === n ? nodo.scrollTop : 0;
+  INICIO.ultimoPaso = n;
+  const cuadro = vaciar(nodo);
   const tarjeta = TARJETAS_INICIO[n];
   const ultima = n === TARJETAS_INICIO.length - 1;
 
@@ -10796,6 +10850,7 @@ function pintarInicio() {
       ? h('button', { clase: 'primario', onclick: () => cerrarInicio(true) }, 'Empezar')
       : h('button', { clase: 'primario', onclick: () => irAInicio(n + 1) },
         n === 0 ? 'Vamos' : 'Siguiente ›')));
+  cuadro.scrollTop = scroll;
 }
 
 /* Un enlace que se abre aparte: la guía sigue debajo esperando la clave. */
@@ -10832,16 +10887,18 @@ function tarjetaBienvenidaInicio() {
     h('div', { clase: 'pista' },
       'Esto convierte lo que escribas —unas notas, un artículo, tu propio guion— '
       + 'en un vídeo de animación narrada, en varios pasos con revisión entre '
-      + 'ellos. Para que pueda hacerlo necesita hablar con cinco servicios, y '
-      + 'cada uno pide su llave. Esta guía te lleva a por ellas una a una, con el '
-      + 'enlace de cada sitio.'),
+      + 'ellos. Para que pueda hacerlo necesita hablar con hasta seis servicios, '
+      + 'y cada uno pide su llave. Esta guía te lleva a por ellas una a una, con '
+      + 'el enlace de cada sitio.'),
     h('ol', { clase: 'inicio-pasos' },
       h('li', {}, h('b', {}, 'Claude'), ': tu cuenta, no una clave. Escribe el guion, el '
         + 'catálogo visual y los rótulos, y mueve al asistente de la burbuja.'),
       h('li', {}, h('b', {}, 'OpenAI'), ': con ella se dibujan los planos.'),
+      h('li', {}, h('b', {}, 'kie.ai'), ': la misma tarea que OpenAI pero más barata; opcional, y se '
+        + 'puede dejar para luego.'),
       h('li', {}, h('b', {}, 'Cartesia'), ': la voz que narra.'),
-      h('li', {}, h('b', {}, 'Jamendo y FreeSound'), ': música y efectos. Son las dos únicas que se '
-        + 'pueden dejar para luego; las otras tres hacen falta.')),
+      h('li', {}, h('b', {}, 'Jamendo y FreeSound'), ': música y efectos, también para luego. '
+        + 'Claude, OpenAI (o kie.ai) y Cartesia son las que hacen falta.')),
     h('div', { clase: 'caja-info' },
       'Abajo a la derecha hay una burbuja: es el asistente. Sabe cómo funciona '
       + 'todo esto y ve lo que está pasando en tu Estudio, así que cuando algo '
@@ -11038,6 +11095,46 @@ function tarjetaOpenAIInicio() {
     campoClaveInicio('sk-…', clave => guardarClaves({
       openai: [{ etiqueta: '', clave, activa: true }] })),
   ];
+}
+
+/* KIE.AI EN LA GUÍA: la alternativa barata a OpenAI. Es opcional (con OpenAI
+   sobra para generar), así que va DESPUÉS de OpenAI y antes de Cartesia, y
+   trae también el selector de motor —igual que `seccionKie` en
+   Configuración— para que elegir el flujo económico no obligue a salir de la
+   guía. `cargarClaves()` ya deja `estadoConfig().ajustes` listo antes de
+   pintar este paso. */
+function tarjetaKieInicio() {
+  const ficha = estadoConfig().ficha;
+  const kie = (ficha && ficha.kie) || { puesta: false, cola: '' };
+  const vista = estadoConfig();
+  const datos = vista.ajustes;
+  const motor = (datos && datos.ajustes && datos.ajustes.motor_imagen) || 'openai';
+  const partes = [
+    h('div', { clase: 'pista' },
+      'Opcional: el otro proveedor de imágenes, y el más barato. Con OpenAI la '
+      + 'mayor parte de lo que cuesta un plano son sus referencias de estilo y '
+      + 'reparto, que se pagan como tokens de entrada; kie.ai cobra una tarifa '
+      + 'plana por imagen, lleve las que lleve. Si la dejas sin poner, el '
+      + 'Estudio sigue generando con OpenAI.'),
+    h('ol', { clase: 'inicio-pasos' },
+      h('li', {}, 'Entra en ', enlaceInicio('kie.ai', 'https://kie.ai/'),
+        ' y crea una cuenta si no la tienes.'),
+      h('li', {}, 'Busca la sección de claves de API (API Key) del panel y cópiala: '
+        + 'este Estudio no ha podido verificar la ruta exacta, ver «kie.ai» en '
+        + 'CLAUDE.md.'),
+      h('li', {}, 'Pégala aquí.')),
+    ficha ? estadoClaveInicio(!!kie.puesta, kie.cola || '')
+      : h('div', { clase: 'cargando' }, 'leyendo las claves…'),
+    campoClaveInicio('la clave de kie.ai', clave => guardarClaves({ kie: { clave } })),
+  ];
+  if (ficha && kie.puesta) {
+    partes.push(campoSelect('Con quién se generan los vídeos nuevos', motor, [
+      { valor: 'openai', nombre: 'OpenAI (gpt-image-2)' },
+      { valor: 'kie', nombre: 'kie.ai' },
+    ], valor => guardarAjusteImagen({ motor_imagen: valor }),
+      'Los vídeos que ya existen siguen con el suyo.'));
+  }
+  return partes;
 }
 
 function tarjetaCartesiaInicio() {
