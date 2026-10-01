@@ -918,7 +918,13 @@ def previsualizar(ruta_png, ruta_svg, destino, ruta_fija=None, mov=None,
     else:
         x0, y0, x1 = 0.0, 0.0, float(lienzo[0])
     escala = ancho / max(1.0, (x1 - x0))
-    html = (f'<html><body style="margin:0;width:{ancho}px;height:{alto}px;'
+    # SIN ESTO, EDGE ADIVINA LA CODIFICACION -- y a veces adivina mal: una
+    # tilde de la locucion salia "Ã³" en vez de "ó" en la muestra de un estilo
+    # (visto en "Escrituras", 29-09). `p8_render.PAGINA` ya lo declara; esto
+    # solo dibuja la revision, pero es lo que un editor mira para juzgar como
+    # queda el subtitulo, y ahi tambien tiene que decir lo que dice de verdad.
+    html = (f'<html><head><meta charset="utf-8"></head>'
+            f'<body style="margin:0;width:{ancho}px;height:{alto}px;'
             f'overflow:hidden;background:#0b0c09">'
             f'<div style="position:absolute;left:0;top:0;'
             f'width:{ancho}px;height:{alto}px;overflow:hidden">'
@@ -940,15 +946,34 @@ def previsualizar(ruta_png, ruta_svg, destino, ruta_fija=None, mov=None,
             f'<script>{BUSCAR_ENTRADAS}</script>'
             f'</body></html>')
     ruta_html = medios.escribir_texto(destino + ".html", html)
-    medios.rasterizar(ruta_html, destino, ancho, alto, transparente=False)
+    # `rasterizar` YA reintenta si Edge se cae o no deja fichero, pero no si
+    # Edge "acierta" y lo que deja es SU pagina de error (ver `_comprobar_previa`):
+    # ese caso se descubre aqui, despues, cuando `rasterizar` ya ha vuelto. Sin
+    # reintentar TAMBIEN este caso, el mismo fallo suelto que `rasterizar` sabe
+    # absorber tumbaba la muestra entera con una sola pagina en blanco de seis.
+    ultimo = None
+    for intento in range(1, medios.INTENTOS_RASTERIZAR + 1):
+        medios.rasterizar(ruta_html, destino, ancho, alto, transparente=False)
+        try:
+            _comprobar_previa(destino)
+            ultimo = None
+            break
+        except RuntimeError as fallo:                        # noqa: PERF203
+            ultimo = fallo
+            if intento < medios.INTENTOS_RASTERIZAR:
+                time.sleep(medios.ESPERA_RASTERIZAR_S)
     os.remove(ruta_html)
-    _comprobar_previa(destino)
+    if ultimo is not None:
+        raise ultimo
     return destino
 
 
-#: El fondo del cuadro compuesto, en el HTML de arriba. Sirve de FIRMA: si la
-#: esquina no se parece a esto, lo que hay dentro no lo ha pintado esta funcion.
-FONDO_PREVIA = (0x0b, 0x0c, 0x09)
+#: Por debajo de esto (desviacion tipica sobre 0-255) una imagen es
+#: practicamente plana de punta a punta. Medido: la pagina de error de Edge
+#: pesa 27 KB y no llega a variacion 5; un cuadro real, del estilo que sea
+#: --incluido uno de fondo claro solido--, siempre pasa de 40 por la cartela,
+#: el subtitulo o el propio dibujo en algun punto del fotograma.
+UMBRAL_VARIACION_PREVIA = 15.0
 
 
 def _comprobar_previa(destino):
@@ -961,23 +986,33 @@ def _comprobar_previa(destino):
     versiones, todas de 27 KB, y nadie levanto en ningun sitio: se vieron
     MIRANDO la pantalla.
 
-    La firma es la esquina. Este HTML pinta el fondo a #0b0c09 y encima el plano
-    escalado, asi que la esquina de un cuadro de verdad es oscura o es imagen;
-    la de la pagina de error es casi blanca. No se mira el peso: un plano
-    legitimamente plano pesa poco y seria un falso positivo.
+    La firma NO es solo la esquina, es que la pagina de error es CASI PLANA de
+    punta a punta -- blanca de verdad, con como mucho un texto gris chiquito
+    en algun sitio, sin apenas variacion en toda la captura. Un cuadro de
+    verdad SIEMPRE tiene algo mas en algun otro punto del fotograma -- la
+    cartela, el subtitulo, el propio dibujo -- asi que mirar solo si la
+    esquina es clara no basta: un estilo de fondo claro de punta a punta
+    (visto en "Parabolas en Trazo", beige) tiene la esquina tan clara como la
+    pagina de error y el chivato viejo, que solo miraba el pixel [5,5], lo
+    tumbaba sin que hubiera fallado nada. Lo que de verdad distingue una
+    pagina de error de un cuadro con fondo claro LEGITIMO es que el cuadro
+    real varia en algun punto de la imagen ENTERA y la pagina de error no.
 
     Levanta y no borra el PNG: quien llama lo recoge como aviso (ver `ejecutar`)
     y asi queda en disco para poder mirarlo si alguien pregunta por que.
     """
     try:
         from PIL import Image                                 # noqa: PLC0415
-        esquina = Image.open(destino).convert("RGB").load()[5, 5]
+        import numpy as np                                    # noqa: PLC0415
+        pixeles = np.asarray(Image.open(destino).convert("RGB"), dtype=np.float32)
     except Exception:                                         # noqa: BLE001
         return
-    if min(esquina) > 200:
+    media, variacion = float(pixeles.mean()), float(pixeles.std())
+    if media > 200 and variacion < UMBRAL_VARIACION_PREVIA:
         raise RuntimeError(
-            f"la previa salio en blanco ({esquina}): Edge ha fotografiado una "
-            f"pagina de error en vez del cuadro")
+            f"la previa salio en blanco (media {media:.0f}, variacion "
+            f"{variacion:.1f}): Edge ha fotografiado una pagina de error en "
+            f"vez del cuadro")
 
 
 # ------------------------------------------------------------------ capturas
