@@ -38,6 +38,7 @@ Reglas que valen para toda la API y no se repiten en cada fila:
 | `POST` | `/api/proyectos/{pid}/miniaturas` | Dibuja tres propuestas de miniatura en segundo plano. -> trabajo |
 | `POST` | `/api/proyectos/{pid}/presets-canal/{preset_id}/aplicar` | Copia los valores del preset a los params de los pasos que toque. |
 | `GET` | `/api/proyectos/{pid}/previsualizacion` | Las piezas para ver el video sin montarlo. -> {escenas, audio, ...} |
+| `POST` | `/api/proyectos/{pid}/espiar/{vid}/aplicar` | Mete la receta de un video de referencia en las indicaciones del guion. |
 | `GET` | `/api/proyectos/{pid}/publicacion` | La ficha para subir a YouTube, si ya se escribio. -> {ficha, texto, trabajo} |
 | `POST` | `/api/proyectos/{pid}/publicacion` | Escribe (o reescribe) la ficha de publicacion en segundo plano. -> trabajo |
 | `PUT` | `/api/proyectos/{pid}/redactor` | Guarda el prompt escrito de cada plano. Un prompt vacío lo quita. |
@@ -199,6 +200,12 @@ Reglas que valen para toda la API y no se repiten en cada fila:
 | | Ruta | Qué hace |
 |---|---|---|
 | `POST` | `/api/estimacion` | Lo que va a salir de esa duracion: palabras, planos y dolares. |
+| `GET` | `/api/espiar` | Los videos de referencia ya estudiados. |
+| `POST` | `/api/espiar/buscar` | Videos que responden a una busqueda, con sus visitas. |
+| `POST` | `/api/espiar/canal` | Los videos de un canal y CUALES se salen de su mediana. |
+| `POST` | `/api/espiar/video` | Estudia un video: sus numeros y su receta. -> trabajo |
+| `DELETE` | `/api/espiar/{vid}` | Quita un video de las referencias. La cache de sus numeros se queda. |
+| `GET` | `/api/espiar/{vid}` | Un estudio entero, con su receta. |
 | `GET` | `/api/presets-light` | Los presets de canal, con sus viñetas y su plan de generacion. |
 | `POST` | `/api/presets-light` | Crea el estilo entero a partir de los cuatro campos. |
 | `POST` | `/api/presets-light/imagenes` | Guarda las imagenes que acompanan a una descripcion de estilo. |

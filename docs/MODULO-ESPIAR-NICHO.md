@@ -108,3 +108,52 @@ igual que la memoria del canal o la ficha de publicación.
 
 No cuesta dinero de generación: metadatos y subtítulos son gratis, y el análisis
 va por la suscripción del CLI.
+
+## Gemini lee el vídeo entero, y eso cambia el módulo
+
+Probado el 01-10-2026 contra el vídeo de 10 M de Ink Explainer. **La API de
+Gemini acepta una URL de YouTube como entrada** y procesa imagen y audio:
+61.158 tokens de vídeo en una sola llamada, dentro de la capa gratuita.
+
+Resuelve de golpe los dos problemas que teníamos:
+
+- **El bloqueo.** No hace falta yt-dlp ni bajar nada, así que da igual que la
+  IP esté marcada.
+- **El ritmo visual**, que con subtítulos NO se puede saber. Gemini lo ve.
+
+### Lo que midió, y por qué importa
+
+| | |
+|---|---|
+| Cortes por minuto de Ink Explainer | **18**, o sea un plano cada **3,3 s** |
+| Nuestro ritmo `documental` | 8,9 s por plano |
+
+Van **2,7 veces más rápido**. Con un matiz que decide el dinero: ellos son
+ANIMACION y un corte no les cuesta nada; aquí cada cambio de plano es una
+imagen pagada. Igualar su ritmo llevaría un vídeo de 10 minutos de 80 planos
+(4,00 $) a 182 (9,10 $).
+
+**La salida es Progressive Rhythm**: ritmo rápido solo en el primer minuto, que
+es donde se pierde a la gente, y 7-12 s después. Unos 15 planos extra, 0,75 $.
+
+### Y el gancho, que los subtítulos escondían
+
+Gemini describió los primeros quince segundos: despertador, ciudad agobiada,
+trabajo atado al reloj, dormir, salto de 50.000 años. Una secuencia montada,
+no una frase.
+
+Leyendo solo la transcripción, la lección parecía «abre en segunda persona».
+Viendo el vídeo, la lección real es **«abre con un montaje rápido de la vida
+del espectador antes de decir nada del tema»**. Esa diferencia justifica el
+motor entero.
+
+### Lo que cuesta
+
+Capa gratuita: solo Flash y Flash-Lite, ~1.500 peticiones al día, 8 horas de
+vídeo de YouTube diarias. Pro es de pago desde abril de 2026.
+
+**Veo (generar vídeo) NO tiene capa gratuita por API**: 0,10-0,40 $ por segundo,
+o sea 0,80-3,20 $ por un clip de ocho segundos, frente a 0,05 $ de una imagen
+fija. Un clip cuesta entre 16 y 64 imágenes, así que solo sale a cuenta en el
+GANCHO. Flow (la web) sí da créditos gratis con cada cuenta de Google: generar
+ahí a mano un clip para el arranque y traerlo es la via barata.

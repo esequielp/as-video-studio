@@ -495,6 +495,13 @@ const API = {
   estimacion: () => `${BASE}/api/estimacion`,
   // modo light: la galeria de presets de canal
   presetsLight: () => `${BASE}/api/presets-light`,
+  /* ESPIAR: los vídeos de referencia ya estudiados. No son de ningún proyecto
+     —son del canal— así que viven en el banco y se listan aparte. */
+  espiar: () => `${BASE}/api/espiar`,
+  espiarVideo: () => `${BASE}/api/espiar/video`,
+  espiarUno: id => `${BASE}/api/espiar/${encodeURIComponent(id)}`,
+  espiarAplicar: (pid, vid) =>
+    `${BASE}/api/proyectos/${encodeURIComponent(pid)}/espiar/${encodeURIComponent(vid)}/aplicar`,
   presetLight: id => `${BASE}/api/presets-light/${encodeURIComponent(id)}`,
   presetLightPlan: () => `${BASE}/api/presets-light/plan`,
   presetLightRegenerar: id => `${BASE}/api/presets-light/${encodeURIComponent(id)}/regenerar`,
@@ -4975,6 +4982,12 @@ async function cargarGaleriaLight(forzar) {
         .filter(p => p.video_light)
         .sort((a, b) => String(b.actualizado || '').localeCompare(String(a.actualizado || '')));
     } catch (e) { APP.light.datos.videos = []; }
+    /* Y LAS REFERENCIAS ESTUDIADAS. En su propio try: que no haya ninguna, o
+       que el banco no se pueda leer, no puede dejar la galería sin estilos.
+       Son lo último que se pinta y lo primero que puede faltar. */
+    try {
+      APP.light.datos.estudios = (await pedir(API.espiar())).estudios || [];
+    } catch (e) { APP.light.datos.estudios = []; }
     // el ritmo de fábrica lo dice el servidor, no esta pantalla
     if (APP.light.encargo && !APP.light.encargo.ritmo) {
       APP.light.encargo.ritmo = ritmoPorDefecto();
@@ -4987,6 +5000,250 @@ async function cargarGaleriaLight(forzar) {
 }
 
 function presetsLight() { return (APP.light.datos || {}).presets || []; }
+
+/* ------------------------------------------- las referencias de otros canales
+
+   Vídeos que ya funcionan, estudiados para saber COMO estan hechos. Viven en la
+   galería y no en las pestañas de un vídeo porque no son de un vídeo: son del
+   canal, como los estilos.
+
+   Lo que se guarda es la RECETA —el gancho, el ritmo, la estructura— y nunca el
+   guion ajeno: copiarlo literal es contenido reutilizado para YouTube y además
+   sale peor (ver pasos/espiar.py). */
+
+function estudiosEspiar() { return (APP.light.datos || {}).estudios || []; }
+
+/* ABREVIADO Y NO con separador de miles: en una lista de referencias caben
+   «10 M» y «108 K», pero no «10.004.773». OJO AL NOMBRE: `miles()` ya existe
+   más arriba y hace lo contrario (1.234.567). Llamar igual a las dos se llevó
+   la de arriba por delante sin un solo error y cambió el formato de las
+   palabras del brief -- lo cantó `sin_llamar_js.py`. */
+function milesCorto(n) {
+  if (!n && n !== 0) return '—';
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace('.0', '')} M`;
+  if (n >= 1e3) return `${Math.round(n / 1e3)} K`;
+  return String(n);
+}
+
+function seccionReferencias() {
+  const caja = h('div', {});
+  const fichas = estudiosEspiar();
+  caja.appendChild(h('div', { clase: 'light-cab' },
+    h('h2', {}, 'Referencias'),
+    h('span', { clase: 'meta' }, fichas.length
+      ? `${fichas.length} vídeo${fichas.length === 1 ? '' : 's'} estudiado${fichas.length === 1 ? '' : 's'}`
+      : 'vídeos que ya funcionan, para saber cómo están hechos')));
+
+  const lista = h('div', { clase: 'videos-light' });
+  fichas.forEach(e => lista.appendChild(h('div', { clase: 'video-light' },
+    h('button', {
+      clase: 'abrir', title: 'Ver cómo está hecho',
+      onclick: () => abrirReferencia(e.id),
+    },
+      h('span', { clase: 'nombre' }, e.titulo || e.id),
+      h('span', { clase: 'meta' },
+        `${e.canal || '—'} · ${milesCorto(e.visitas)} visitas`
+        + (e.tiene_receta ? '' : ' · sin receta'))),
+    h('button', {
+      clase: 'mini fantasma peligro', title: 'Quitar de las referencias',
+      onclick: () => olvidarReferencia(e),
+    }, 'Quitar'))));
+  /* `fantasma` a secas y no una clase nueva: el CSS de esta pantalla ya tiene
+     el botón discreto que hace falta, y una clase inventada sin regla detrás no
+     da ningún error -- simplemente sale sin estilo y nadie se entera. */
+  lista.appendChild(h('button', {
+    clase: 'fantasma',
+    onclick: () => pedirReferencia(),
+  }, '+ Estudiar un vídeo'));
+  caja.appendChild(lista);
+  return caja;
+}
+
+async function pedirReferencia() {
+  const url = window.prompt(
+    'Pega la dirección de un vídeo de YouTube que funcione en tu nicho.\n\n'
+    + 'Se mirará cómo está hecho: el gancho, cada cuánto cambia de plano y '
+    + 'cómo está montado. El guion NO se guarda.');
+  if (url === null || !url.trim()) return;
+
+  /* LA TRANSCRIPCION PEGADA ES EL RESPALDO, no el camino normal. Con la clave
+     de Gemini puesta el servidor ve el vídeo entero y no hace falta nada más;
+     sin ella, o con la IP marcada por YouTube, hace falta el texto. Se pregunta
+     DESPUES de la URL y se puede dejar vacío: así quien tenga Gemini no se
+     entera de que esto existe. */
+  const pegada = window.prompt(
+    'Si el servidor no puede leer el vídeo solo, pega aquí su transcripción\n'
+    + '(en YouTube: «...» > Mostrar transcripción).\n\n'
+    + 'Déjalo vacío para que lo intente por su cuenta.') || '';
+
+  try {
+    const r = await pedir(API.espiarVideo(),
+      { method: 'POST', cuerpo: { url: url.trim(), transcripcion: pegada.trim() } });
+    toast('Mirando el vídeo… tarda unos minutos.');
+    /* SE SIGUE POR EL MISMO CAMINO QUE CUALQUIER TRABAJO. El servidor lleva
+       estos en un gestor aparte (no son de ningún proyecto), pero los sirve por
+       /api/trabajos igual que los demás: por eso aquí no hay nada especial. */
+    seguirTrabajo('espiar', r.trabajo_id, () => { cargarGaleriaLight(true); });
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+async function olvidarReferencia(estudio) {
+  if (!window.confirm(`¿Quitar «${estudio.titulo || estudio.id}» de las referencias?`)) return;
+  try {
+    await pedir(API.espiarUno(estudio.id), { method: 'DELETE' });
+    await cargarGaleriaLight(true);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+async function abrirReferencia(vid) {
+  try {
+    const estudio = await pedir(API.espiarUno(vid));
+    irALight('referencia', { referencia: estudio });
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function filaDato(etiqueta, valor) {
+  return h('div', { clase: 'fila' },
+    h('span', { clase: 'meta' }, etiqueta),
+    h('b', {}, valor === null || valor === undefined || valor === '' ? '—' : String(valor)));
+}
+
+function vistaReferencia() {
+  const e = APP.light.referencia || {};
+  const v = e.video || {};
+  const r = e.receta || {};
+  const caja = h('div', {});
+
+  caja.appendChild(h('div', { clase: 'light-cab' },
+    h('button', { clase: 'fantasma', onclick: () => irALight('galeria') }, '← Referencias'),
+    h('h2', {}, v.titulo || v.id || 'Referencia')));
+  caja.appendChild(h('div', { clase: 'meta' },
+    `${v.canal || '—'} · ${milesCorto(v.suscriptores)} suscriptores · ${milesCorto(v.visitas)} visitas`));
+
+  /* LOS NUMEROS. `visitas_por_suscriptor` es el que de verdad dice algo: un
+     vídeo con noventa veces las visitas que el canal tiene suscriptores no lo
+     vio su audiencia, lo empujó el algoritmo -- y eso cambia qué hay que
+     aprender de él. */
+  const m = e.medidas || {};
+  const nums = h('div', { clase: 'bloque-config' }, h('h3', {}, 'Los números'));
+  nums.appendChild(filaDato('Duración', v.duracion_s ? `${Math.round(v.duracion_s / 60)} min` : '—'));
+  nums.appendChild(filaDato('Visitas por suscriptor', m.visitas_por_suscriptor));
+  nums.appendChild(filaDato('Likes', m.ratio_likes ? `${m.ratio_likes} %` : '—'));
+  /* LAS PALABRAS SOLO SI LAS HAY. Con Gemini no se baja la transcripción, así
+     que el contador vale cero -- y un cero pintado como dato se lee como una
+     medición, no como «esto no se ha medido». */
+  if (m.palabras_por_minuto) {
+    nums.appendChild(filaDato('Palabras por minuto', m.palabras_por_minuto));
+  }
+  caja.appendChild(nums);
+
+  /* LO QUE SE ESTIMA QUE GANA, con su banda y su aviso. Nunca una cifra sola:
+     la diferencia entre el suelo y el techo de un nicho es de ocho veces. */
+  const g = e.ingresos || {};
+  if (g.usd_mediano) {
+    const din = h('div', { clase: 'bloque-config' }, h('h3', {}, 'Lo que habrá dado'));
+    din.appendChild(h('div', { clase: 'fila' },
+      h('b', {}, `${Math.round(g.usd_bajo).toLocaleString('es')} – `
+        + `${Math.round(g.usd_alto).toLocaleString('es')} $`)));
+    din.appendChild(h('div', { clase: 'meta' }, g.aviso || ''));
+    caja.appendChild(din);
+  }
+
+  if (!r.gancho_visual && !r.gancho) {
+    caja.appendChild(h('div', { clase: 'pista' }, e.error_receta
+      || 'Este vídeo no tiene receta todavía.'));
+    return caja;
+  }
+
+  /* EL GANCHO VISUAL es lo que no se puede sacar de una transcripción, y suele
+     ser la lección: en el vídeo de referencia que se midió eran doce planos de
+     montaje antes de mencionar el tema, que no sale hasta el segundo 27. */
+  const gv = r.gancho_visual;
+  if (gv) {
+    const b = h('div', { clase: 'bloque-config' },
+      h('h3', {}, `Qué se ve al empezar (${gv.segundos || '?'} s)`));
+    (gv.planos || []).forEach(p => b.appendChild(h('div', { clase: 'fila' },
+      h('span', {}, p))));
+    if (gv.dice_el_tema_en_s !== undefined) {
+      b.appendChild(h('div', { clase: 'meta' },
+        `No dice de qué va hasta el segundo ${gv.dice_el_tema_en_s}.`));
+    }
+    caja.appendChild(b);
+  }
+
+  const rv = r.ritmo_visual;
+  if (rv) {
+    const b = h('div', { clase: 'bloque-config' }, h('h3', {}, 'El ritmo'));
+    b.appendChild(filaDato('Segundos por plano', rv.segundos_por_plano));
+    b.appendChild(filaDato('Cortes por minuto', rv.cortes_por_minuto));
+    /* Los dos extremos solo si vienen los dos: una receta vieja no los trae, y
+       media frase («Cambia: 26 s al principio y undefined después») es peor que
+       no decir nada. */
+    const ini = rv.segundos_por_plano_al_principio;
+    const fin = rv.segundos_por_plano_al_final;
+    b.appendChild(h('div', { clase: 'meta' },
+      (rv.cambia_el_ritmo && ini && fin)
+        ? `Cambia: ${ini} s por plano al principio y ${fin} s al final.`
+        : (rv.cambia_el_ritmo ? 'El ritmo cambia a lo largo del vídeo.'
+          : 'El mismo de principio a fin.')));
+    caja.appendChild(b);
+  }
+
+  if ((r.estructura || []).length) {
+    const b = h('div', { clase: 'bloque-config' }, h('h3', {}, 'Cómo está montado'));
+    r.estructura.forEach(x => b.appendChild(h('div', { clase: 'fila' },
+      h('span', { clase: 'meta' }, `${Math.floor((x.desde_s || 0) / 60)}:`
+        + String((x.desde_s || 0) % 60).padStart(2, '0')),
+      h('b', {}, x.funcion || ''),
+      h('span', {}, x.que_hace || ''))));
+    caja.appendChild(b);
+  }
+
+  if ((r.trasladable || []).length) {
+    const b = h('div', { clase: 'bloque-config' },
+      h('h3', {}, 'Lo que puedes copiar sin copiar nada'));
+    r.trasladable.forEach(x => b.appendChild(h('div', { clase: 'fila' }, h('span', {}, x))));
+    caja.appendChild(b);
+  }
+
+  /* APLICARLA A UN VIDEO. Va a `prompt_general`, que es el cajón de COMO
+     contarlo; el material son los hechos y no se tocan. Solo se ofrecen los
+     vídeos que todavía no tienen guion: aplicarla a uno escrito lo deja
+     obsoleto y con él la voz y las imágenes ya pagadas. */
+  const videos = videosLight();
+  if (r.para_el_guion && videos.length) {
+    const b = h('div', { clase: 'bloque-config' },
+      h('h3', {}, 'Usar esta receta en un vídeo'));
+    b.appendChild(h('div', { clase: 'meta' },
+      'Se añade a las indicaciones del guion. Si el vídeo ya tiene guion '
+      + 'escrito, cambiarlas lo deja obsoleto y habría que volver a pagar la '
+      + 'voz y las imágenes.'));
+    videos.forEach(vid => b.appendChild(h('div', { clase: 'fila' },
+      h('span', {}, vid.nombre || vid.id),
+      h('button', {
+        clase: 'mini', onclick: () => aplicarReceta(vid, e),
+      }, 'Aplicar'))));
+    caja.appendChild(b);
+  }
+  return caja;
+}
+
+async function aplicarReceta(video, estudio) {
+  const vid = (estudio.video || {}).id;
+  if (!window.confirm(`¿Añadir esta receta a las indicaciones de «${video.nombre || video.id}»?`)) return;
+  try {
+    const r = await pedir(API.espiarAplicar(video.id, vid), { method: 'POST' });
+    toast(r.aviso || 'Receta añadida a las indicaciones del guion.', !!r.deja_obsoleto);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
 
 function fichaLight(id) { return presetsLight().find(p => p.id === id) || null; }
 
@@ -5370,6 +5627,7 @@ function pintarLightAhora() {
     if (APP.light.vista === 'crear') contenido.appendChild(vistaCrearLight());
     else if (APP.light.vista === 'generando') contenido.appendChild(vistaGenerandoLight());
     else if (APP.light.vista === 'preset') contenido.appendChild(vistaPresetLight());
+    else if (APP.light.vista === 'referencia') contenido.appendChild(vistaReferencia());
     else if (APP.light.vista === 'elegido') {
       /* TRES VISTAS DENTRO DE «elegido», y la elige LO QUE HAY: el encargo
          mientras no haya vídeo, el guion en cuanto lo hay, y el vídeo cuando se
@@ -5453,6 +5711,8 @@ function vistaGaleriaLight() {
       }, 'Apartar'))));
     caja.appendChild(lista);
   }
+
+  caja.appendChild(seccionReferencias());
 
   /* LOS INTENTOS A MEDIAS. Un taller nace antes que su estilo, así que una
      generación que falla deja una carpeta de cientos de megas sin nadie que la

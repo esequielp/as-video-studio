@@ -106,6 +106,10 @@ def _vacio():
         # El otro proveedor de imagenes (motores/imagen_kie). Una sola clave:
         # kie.ai es una cuenta con creditos, no un reparto entre cuentas.
         "kie": {"clave": ""},
+        # Gemini (motores/gemini): LEE videos de YouTube enteros --imagen y
+        # audio-- para estudiar como estan hechos. Una sola clave, de Google
+        # AI Studio, y la capa gratuita basta: solo se usa para analizar.
+        "gemini": {"clave": ""},
         # La musica y los efectos: se buscan en catalogos con licencia libre y
         # cada uno pide su clave. Sin ellas el paso de sonido no busca nada y lo
         # dice; no impide montar el video.
@@ -159,7 +163,7 @@ def _normalizar(datos):
     elif isinstance(cartesia, str):
         base["cartesia"]["clave"] = cartesia.strip()
 
-    for suelta in ("kie", "jamendo", "freesound"):
+    for suelta in ("kie", "gemini", "jamendo", "freesound"):
         cruda = datos.get(suelta)
         if isinstance(cruda, dict):
             base[suelta]["clave"] = str(cruda.get("clave") or "").strip()
@@ -245,6 +249,7 @@ def adoptar_env():
                                     "clave": clave, "activa": True})
     datos["cartesia"]["clave"] = valores.get("CARTESIA_API_KEY", "") or ""
     datos["kie"]["clave"] = valores.get("KIE_API_KEY", "") or ""
+    datos["gemini"]["clave"] = valores.get("GEMINI_API_KEY", "") or ""
     datos["jamendo"]["clave"] = valores.get("JAMENDO_CLIENT_ID", "") or ""
     datos["freesound"]["clave"] = valores.get("FREESOUND_API_KEY", "") or ""
     return datos
@@ -333,7 +338,7 @@ def _fusionar(actual, peticion):
     # es la que ya habia. Sin eso, editar la de Jamendo borraria la de Cartesia,
     # porque la clave de verdad no baja al navegador NUNCA y la pantalla manda
     # el centinela en su lugar.
-    for suelta in ("cartesia", "kie", "jamendo", "freesound"):
+    for suelta in ("cartesia", "kie", "gemini", "jamendo", "freesound"):
         if suelta in peticion:
             ficha = peticion.get(suelta)
             clave = ficha.get("clave") if isinstance(ficha, dict) else ficha
@@ -475,6 +480,8 @@ def espejar_env(datos=None):
         nuestras["CARTESIA_API_KEY"] = datos["cartesia"]["clave"]
     if datos["kie"]["clave"]:
         nuestras["KIE_API_KEY"] = datos["kie"]["clave"]
+    if datos["gemini"]["clave"]:
+        nuestras["GEMINI_API_KEY"] = datos["gemini"]["clave"]
     if datos["jamendo"]["clave"]:
         nuestras["JAMENDO_CLIENT_ID"] = datos["jamendo"]["clave"]
     if datos["freesound"]["clave"]:
@@ -483,6 +490,7 @@ def espejar_env(datos=None):
     # Los nombres que ESTA pantalla escribe. Lo que no este aqui se conserva tal
     # cual y en su orden: un .env puede tener cosas que nadie de aqui gestiona.
     gestionadas = {"OPENAI_API_KEY", "CARTESIA_API_KEY", "KIE_API_KEY",
+                   "GEMINI_API_KEY",
                    "JAMENDO_CLIENT_ID", "FREESOUND_API_KEY"} | {
         f"OPENAI_API_KEY_{i}" for i in range(2, MAX_OPENAI + 1)}
 
@@ -521,9 +529,38 @@ def tapar(clave):
     return f"…{clave[-4:]}" if len(clave) > 4 else "…"
 
 
+def _rellenar_del_env(datos):
+    """Las claves sueltas que faltan en el almacén pero están en el .env.
+
+    POR QUE HACE FALTA: `adoptar_env` solo corre la primera vez, cuando todavía
+    no hay `claves.json`. A partir de ahí, una clave pegada a mano en el .env
+    --que es como se añade una nueva antes de que la pantalla la conozca-- la
+    encuentran los motores (todos caen al .env) pero NO la pantalla, que diría
+    «sin poner» sobre algo que funciona. Dos sitios contando cosas distintas.
+
+    Solo rellena lo VACIO, así que no pisa nada; y borrar una clave desde la
+    pantalla también la quita del .env (`espejar_env`), así que un borrado
+    tampoco revive por aquí.
+    """
+    valores = None
+    for suelta, nombre in (("cartesia", "CARTESIA_API_KEY"),
+                           ("kie", "KIE_API_KEY"),
+                           ("gemini", "GEMINI_API_KEY"),
+                           ("jamendo", "JAMENDO_CLIENT_ID"),
+                           ("freesound", "FREESOUND_API_KEY")):
+        if (datos.get(suelta) or {}).get("clave"):
+            continue
+        if valores is None:
+            valores = _valores_env()
+        puesta = (valores.get(nombre) or "").strip()
+        if puesta:
+            datos.setdefault(suelta, {})["clave"] = puesta
+    return datos
+
+
 def resumen(datos=None):
     """Lo que SI puede bajar al navegador. Ni una clave entera."""
-    datos = datos if datos is not None else leer()
+    datos = _rellenar_del_env(datos if datos is not None else leer())
     return {
         "openai": [{
             "id": c["id"],
@@ -538,6 +575,10 @@ def resumen(datos=None):
         "kie": {
             "puesta": bool(datos["kie"]["clave"]),
             "cola": tapar(datos["kie"]["clave"]),
+        },
+        "gemini": {
+            "puesta": bool(datos["gemini"]["clave"]),
+            "cola": tapar(datos["gemini"]["clave"]),
         },
         "claude_cli": {
             "cuentas": [{

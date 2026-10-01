@@ -9983,6 +9983,21 @@ def leer_estudio(vid: str):
         return json.load(fh)
 
 
+@app.delete("/api/espiar/{vid}")
+def olvidar_estudio(vid: str):
+    """Quita un vídeo de las referencias.
+
+    SE BORRA EL ESTUDIO, NO LA CACHE. La caché son los números que ya costaron
+    su espera a YouTube; si mañana se vuelve a estudiar el mismo vídeo, no hay
+    que volver a pedirlos y arriesgar otro bloqueo.
+    """
+    ruta = os.path.join(_carpeta_espiar(), "estudios", f"{vid}.json")
+    if not os.path.isfile(ruta):
+        raise ErrorApi(404, f"no hay ningún estudio de {vid}")
+    os.remove(ruta)
+    return {"olvidado": vid}
+
+
 @app.post("/api/espiar/buscar")
 def espiar_buscar(cuerpo: dict = Body(default=None)):
     """Vídeos que responden a una búsqueda, con sus visitas. -> {videos}"""
@@ -10039,14 +10054,43 @@ def espiar_video(cuerpo: dict = Body(default=None)):
 
 
 def _correr_espiar(avisar, vid, pegada):
-    """Baja los números, consigue la transcripción y destila la receta."""
+    """Baja los números, mira el vídeo y destila la receta.
+
+    DOS CAMINOS PARA LA RECETA, y el primero es mucho mejor:
+
+      GEMINI    ve el vídeo entero -- imagen y audio -- y trae lo que una
+                transcripción no puede traer: qué se VE en los primeros quince
+                segundos y cada cuánto cambia el plano. Medido contra el vídeo
+                de 10 M de Ink Explainer: doce planos de montaje antes de
+                mencionar el tema, que no aparece hasta el segundo 27.
+      EL CLI    lee la transcripción. Es el respaldo para cuando no hay clave
+                de Gemini, y da la estructura pero no el ritmo visual.
+
+    Las MÉTRICAS vienen de yt-dlp en los dos casos: Gemini no da visitas.
+    """
     motor = _motor_espiar()
     cache = os.path.join(_carpeta_espiar(), "cache")
 
     avisar(0.05, "mirando los números del vídeo")
     ficha = motor.ficha(vid, carpeta_cache=cache)
 
-    avisar(0.2, "consiguiendo lo que se dice en el vídeo")
+    gemini = PASOS_MODULOS.medios.motor("gemini/video.py")
+    if gemini.hay_clave() and not pegada:
+        avisar(0.2, "viendo el vídeo entero (esto tarda unos minutos)")
+        try:
+            receta, meta = gemini.analizar(vid)
+            estudio = PASOS_MODULOS.espiar.estudiar(
+                ficha, [], cwd=RAIZ_ESTUDIO, receta_gemini=receta)
+            estudio["gemini"] = meta
+            _guardar_estudio(vid, estudio)
+            avisar(1.0, "listo")
+            return estudio
+        except Exception as fallo:                          # noqa: BLE001
+            # NO SE ABANDONA: se sigue por el camino viejo. Que Gemini tenga un
+            # mal rato no puede costar las métricas, que ya se han pedido.
+            avisar(0.3, f"Gemini no ha podido: {fallo}")
+
+    avisar(0.35, "consiguiendo lo que se dice en el vídeo")
     trozos = None
     if pegada:
         trozos = motor.transcripcion_pegada(pegada)
@@ -10064,7 +10108,7 @@ def _correr_espiar(avisar, vid, pegada):
             _guardar_estudio(vid, estudio)
             return estudio
 
-    avisar(0.35, "leyendo cómo lo hicieron")
+    avisar(0.5, "leyendo cómo lo hicieron")
     estudio = PASOS_MODULOS.espiar.estudiar(ficha, trozos, cwd=RAIZ_ESTUDIO)
     _guardar_estudio(vid, estudio)
     avisar(1.0, "listo")

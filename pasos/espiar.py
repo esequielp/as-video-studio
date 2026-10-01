@@ -211,27 +211,39 @@ def _json_de(texto):
     return json.loads(texto[inicio:fin + 1])
 
 
-def estudiar(ficha, trozos, cwd=None, avisar=None):
+def estudiar(ficha, trozos, cwd=None, avisar=None, receta_gemini=None):
     """Los números y la receta de un vídeo de referencia. -> dict
 
     `ficha` y `trozos` vienen de `motores/youtube/espiar.py`. Aquí no se sale a
     la red: esto solo piensa.
+
+    `receta_gemini` ES LA BUENA CUANDO LA HAY. Gemini ha VISTO el vídeo, así que
+    trae lo que una transcripción no puede traer: qué se ve en los primeros
+    quince segundos y cada cuánto cambia el plano. Medido contra el vídeo de
+    10 M de Ink Explainer: por los subtítulos el gancho parecía «abre en segunda
+    persona»; viéndolo, son doce planos de montaje y el tema no se menciona
+    hasta el segundo 27. El CLI sobre la transcripción se queda de respaldo para
+    cuando no hay clave de Gemini.
     """
     palabras = len((" ".join(t.get("texto", "") for t in trozos)).split())
     duracion = ficha.get("duracion_s") or 0
 
     receta = {}
     error = None
-    try:
-        # `cli_claude.ejecutar` devuelve (texto, sobre): el sobre trae el
-        # session_id y el gasto, y aqui solo interesa el texto.
-        texto, _sobre = _llamar_claude(_instruccion(ficha, trozos), cwd, avance=avisar)
-        receta = _json_de(texto)
-    except Exception as fallo:                              # noqa: BLE001
-        # SIN RECETA SE DEVUELVEN LOS NUMEROS IGUAL. Las métricas ya han costado
-        # su espera a YouTube; perderlas porque el CLI tuvo un mal rato sería
-        # obligar a volver a pedirlas y arriesgar otro 429.
-        error = f"{type(fallo).__name__}: {fallo}"
+    if receta_gemini:
+        receta = receta_gemini
+    else:
+        try:
+            # `cli_claude.ejecutar` devuelve (texto, sobre): el sobre trae el
+            # session_id y el gasto, y aqui solo interesa el texto.
+            texto, _sobre = _llamar_claude(_instruccion(ficha, trozos), cwd,
+                                           avance=avisar)
+            receta = _json_de(texto)
+        except Exception as fallo:                          # noqa: BLE001
+            # SIN RECETA SE DEVUELVEN LOS NUMEROS IGUAL. Las métricas ya han
+            # costado su espera a YouTube; perderlas porque el CLI tuvo un mal
+            # rato sería obligar a volver a pedirlas y arriesgar otro 429.
+            error = f"{type(fallo).__name__}: {fallo}"
 
     return {
         "video": {k: ficha.get(k) for k in
@@ -250,6 +262,11 @@ def estudiar(ficha, trozos, cwd=None, avisar=None):
         },
         "ingresos": estimar_ingresos(ficha.get("visitas"), ficha.get("categoria")),
         "receta": receta,
+        # DE DONDE SALE LA RECETA, porque no valen lo mismo: la de Gemini ha
+        # visto el video y trae el ritmo visual; la del CLI solo ha leido lo
+        # que se dice. Quien mire el estudio dentro de un mes tiene que poder
+        # saber cual esta leyendo.
+        "receta_de": "gemini" if receta_gemini else ("cli" if receta else None),
         "error_receta": error,
     }
 
