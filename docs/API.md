@@ -202,6 +202,7 @@ Reglas que valen para toda la API y no se repiten en cada fila:
 | `POST` | `/api/estimacion` | Lo que va a salir de esa duracion: palabras, planos y dolares. |
 | `GET` | `/api/espiar` | Los videos de referencia ya estudiados. |
 | `POST` | `/api/espiar/buscar` | Videos que responden a una busqueda, con sus visitas. |
+| `POST` | `/api/espiar/nicho` | Los canales que mandan en un nicho, con sus vistas por video. |
 | `POST` | `/api/espiar/canal` | Los videos de un canal y CUALES se salen de su mediana. |
 | `POST` | `/api/espiar/video` | Estudia un video: sus numeros y su receta. -> trabajo |
 | `DELETE` | `/api/espiar/{vid}` | Quita un video de las referencias. La cache de sus numeros se queda. |

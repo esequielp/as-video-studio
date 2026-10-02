@@ -10014,6 +10014,33 @@ def espiar_buscar(cuerpo: dict = Body(default=None)):
     return {"consulta": consulta, "videos": videos}
 
 
+@app.post("/api/espiar/nicho")
+def espiar_nicho(cuerpo: dict = Body(default=None)):
+    """Los canales que mandan en un nicho, con sus números. -> {canales}
+
+    Va SIN trabajo en segundo plano: son dos llamadas a la API oficial y
+    contesta en un par de segundos, al revés que estudiar un vídeo (que ve el
+    vídeo entero con Gemini y tarda minutos).
+    """
+    datos = _cuerpo(cuerpo)
+    consulta = str(datos.get("nicho") or datos.get("consulta") or "").strip()
+    if not consulta:
+        raise ErrorApi(400, "hace falta 'nicho': lo que buscarías en YouTube")
+    motor = _motor_espiar()
+    if not motor.hay_api():
+        raise ErrorApi(409,
+                       "esto necesita la clave de la YouTube Data API. Ponla en "
+                       "Configuración > Claves y habilita «YouTube Data API v3» "
+                       "en console.cloud.google.com.")
+    try:
+        canales = motor.canales_del_nicho(
+            consulta, int(datos.get("cuantos") or 12),
+            idioma=str(datos.get("idioma") or "es"))
+    except Exception as fallo:                              # noqa: BLE001
+        raise ErrorApi(502, str(fallo))
+    return {"nicho": consulta, "canales": canales}
+
+
 @app.post("/api/espiar/canal")
 def espiar_canal(cuerpo: dict = Body(default=None)):
     """Los vídeos de un canal y CUALES se salen de su mediana. -> dict"""

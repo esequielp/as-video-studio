@@ -157,3 +157,65 @@ o sea 0,80-3,20 $ por un clip de ocho segundos, frente a 0,05 $ de una imagen
 fija. Un clip cuesta entre 16 y 64 imágenes, así que solo sale a cuenta en el
 GANCHO. Flow (la web) sí da créditos gratis con cada cuenta de Google: generar
 ahí a mano un clip para el arranque y traerlo es la via barata.
+
+## La API oficial de YouTube: lo que había que haber hecho desde el principio
+
+Añadido el 01-10-2026, después de que el usuario preguntara por qué no se usaba
+una clave si «una vez hice un HTML simple y con una clave veía canales por
+nichos». Tenía razón.
+
+**El módulo se construyó primero con yt-dlp** —que lee la web de YouTube— para
+no pedir otra clave. Resultado: las dos funciones más útiles, buscar canales de
+un nicho y mirar un canal entero, fueron las dos únicas que nunca llegaron a
+funcionar, porque YouTube bloquea la IP.
+
+**La YouTube Data API v3 no se bloquea.** Es oficial, da 10.000 unidades diarias
+gratis y los datos vienen en vivo. Medido sobre el mismo vídeo con unas horas de
+diferencia: yt-dlp devolvió 10.004.773 visitas y la API 10.057.760.
+
+### Cómo se consigue la clave
+
+Se habilita **«YouTube Data API v3»** en un proyecto de Google Cloud y vale la
+misma clave del proyecto. **OJO AL MENSAJE DE ERROR**: si la API no está
+habilitada, Google contesta un 401 que dice «API keys are not supported by this
+API». Despista mucho — parece que la clave está mal, y lo que pasa es que a ese
+proyecto todavía no le han abierto esta puerta.
+
+### Lo que cuesta cada cosa, y cómo se ahorra
+
+| Llamada | Unidades | De las 10.000 diarias |
+|---|---|---|
+| `search.list` (buscar) | **100** | 100 búsquedas |
+| `videos.list` | 1 | 10.000 vídeos |
+| `channels.list` | 1 | 10.000 canales |
+
+Buscar es cien veces más caro que consultar, así que **se busca UNA vez y luego
+se piden los datos de todos los resultados DE GOLPE**: las dos listas admiten
+hasta 50 ids por llamada. `canales_del_nicho` gasta 101 unidades por búsqueda y
+no 1.100.
+
+### Y la métrica que hace útil todo esto
+
+`canales_del_nicho` ordena por **vistas por vídeo**, no por suscriptores. Es lo
+que de verdad dice dónde estás parado. Medido en el nicho de historias bíblicas
+para niños:
+
+| Canal | Subs | Vídeos | Por vídeo |
+|---|---|---|---|
+| Mi Primera Biblia | 1,21 M | **142** | **2.271.123** |
+| Minno Español | 75.800 | **26** | **536.802** |
+| Mi Pequeña Biblia | 688.000 | 762 | 228.098 |
+| La Biblia con Abi | 19.800 | **12** | 127.206 |
+
+**Minno tiene nueve veces menos suscriptores que Mi Pequeña Biblia y hace el
+doble por vídeo.** Los dos canales más eficientes del nicho tienen 26 y 12
+vídeos; el de 762 rinde menos que ambos. Mirando solo los suscriptores no se ve
+nada de esto.
+
+### El reparto final
+
+| Pieza | Quién la hace |
+|---|---|
+| Números de un vídeo, nichos, canales | **YouTube Data API** (oficial, no se bloquea) |
+| Ver el vídeo: gancho visual y ritmo | **Gemini** (capa gratuita) |
+| Transcripción | yt-dlp, o pegada a mano |

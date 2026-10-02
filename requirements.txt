@@ -19,3 +19,9 @@ requests==2.34.2
 # Solo por el camino de la voz por websocket (pasos/p4_voz), pero sin el ese
 # camino falla en el momento de usarlo, no al arrancar: va aqui a proposito.
 websocket-client==1.9.0
+
+# La transcripcion de un video de referencia (motores/youtube/espiar.py). Estaba
+# instalado en la maquina de desarrollo y NO declarado aqui, asi que una
+# instalacion limpia se quedaba sin el: se vio montando el VPS el 02-10-2026.
+# Como el de arriba, sin el solo falla ese camino y no el arranque.
+yt-dlp==2026.3.13

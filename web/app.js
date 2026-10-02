@@ -498,6 +498,7 @@ const API = {
   /* ESPIAR: los vídeos de referencia ya estudiados. No son de ningún proyecto
      —son del canal— así que viven en el banco y se listan aparte. */
   espiar: () => `${BASE}/api/espiar`,
+  espiarNicho: () => `${BASE}/api/espiar/nicho`,
   espiarVideo: () => `${BASE}/api/espiar/video`,
   espiarUno: id => `${BASE}/api/espiar/${encodeURIComponent(id)}`,
   espiarAplicar: (pid, vid) =>
@@ -5055,8 +5056,44 @@ function seccionReferencias() {
     clase: 'fantasma',
     onclick: () => pedirReferencia(),
   }, '+ Estudiar un vídeo'));
+  lista.appendChild(h('button', {
+    clase: 'fantasma',
+    onclick: () => mirarNicho(),
+  }, '🔍 Ver quién manda en un nicho'));
   caja.appendChild(lista);
+
+  /* LOS CANALES DEL NICHO se pintan aquí mismo y no se guardan: son una foto de
+     hoy, no un activo. Lo que se guarda es el ESTUDIO de un vídeo concreto. */
+  const nicho = APP.light.nicho;
+  if (nicho) {
+    const b = h('div', { clase: 'bloque-config' },
+      h('h3', {}, `Quién manda en «${nicho.nicho}»`));
+    b.appendChild(h('div', { clase: 'meta' },
+      'Ordenados por VISTAS POR VÍDEO, no por suscriptores: un canal con 142 '
+      + 'vídeos puede hacer más por vídeo que uno con 1.000, y eso es lo que '
+      + 'hay que estudiar.'));
+    (nicho.canales || []).forEach(c => b.appendChild(h('div', { clase: 'fila' },
+      h('b', {}, c.canal || ''),
+      h('span', { clase: 'meta' },
+        `${milesCorto(c.suscriptores)} subs · ${c.videos} vídeos`),
+      h('b', {}, `${milesCorto(c.vistas_por_video)} por vídeo`))));
+    caja.appendChild(b);
+  }
   return caja;
+}
+
+async function mirarNicho() {
+  const nicho = window.prompt(
+    '¿Qué buscarías en YouTube para encontrar canales de tu nicho?\n\n'
+    + 'Por ejemplo: «historias bíblicas animadas» o «finanzas explicadas simple».');
+  if (nicho === null || !nicho.trim()) return;
+  try {
+    APP.light.nicho = await pedir(API.espiarNicho(),
+      { method: 'POST', cuerpo: { nicho: nicho.trim(), cuantos: 12 } });
+    pintarLight();
+  } catch (e) {
+    toast(e.message, true);
+  }
 }
 
 async function pedirReferencia() {

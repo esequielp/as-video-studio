@@ -110,6 +110,10 @@ def _vacio():
         # audio-- para estudiar como estan hechos. Una sola clave, de Google
         # AI Studio, y la capa gratuita basta: solo se usa para analizar.
         "gemini": {"clave": ""},
+        # La YouTube Data API (motores/youtube): los numeros de un video, los
+        # canales de un nicho y cuales se salen de su media. Es la via OFICIAL
+        # y no se bloquea, al reves que leer la web con yt-dlp.
+        "youtube": {"clave": ""},
         # La musica y los efectos: se buscan en catalogos con licencia libre y
         # cada uno pide su clave. Sin ellas el paso de sonido no busca nada y lo
         # dice; no impide montar el video.
@@ -163,7 +167,7 @@ def _normalizar(datos):
     elif isinstance(cartesia, str):
         base["cartesia"]["clave"] = cartesia.strip()
 
-    for suelta in ("kie", "gemini", "jamendo", "freesound"):
+    for suelta in ("kie", "gemini", "youtube", "jamendo", "freesound"):
         cruda = datos.get(suelta)
         if isinstance(cruda, dict):
             base[suelta]["clave"] = str(cruda.get("clave") or "").strip()
@@ -250,6 +254,7 @@ def adoptar_env():
     datos["cartesia"]["clave"] = valores.get("CARTESIA_API_KEY", "") or ""
     datos["kie"]["clave"] = valores.get("KIE_API_KEY", "") or ""
     datos["gemini"]["clave"] = valores.get("GEMINI_API_KEY", "") or ""
+    datos["youtube"]["clave"] = valores.get("YOUTUBE_API_KEY", "") or ""
     datos["jamendo"]["clave"] = valores.get("JAMENDO_CLIENT_ID", "") or ""
     datos["freesound"]["clave"] = valores.get("FREESOUND_API_KEY", "") or ""
     return datos
@@ -338,7 +343,7 @@ def _fusionar(actual, peticion):
     # es la que ya habia. Sin eso, editar la de Jamendo borraria la de Cartesia,
     # porque la clave de verdad no baja al navegador NUNCA y la pantalla manda
     # el centinela en su lugar.
-    for suelta in ("cartesia", "kie", "gemini", "jamendo", "freesound"):
+    for suelta in ("cartesia", "kie", "gemini", "youtube", "jamendo", "freesound"):
         if suelta in peticion:
             ficha = peticion.get(suelta)
             clave = ficha.get("clave") if isinstance(ficha, dict) else ficha
@@ -482,6 +487,8 @@ def espejar_env(datos=None):
         nuestras["KIE_API_KEY"] = datos["kie"]["clave"]
     if datos["gemini"]["clave"]:
         nuestras["GEMINI_API_KEY"] = datos["gemini"]["clave"]
+    if datos["youtube"]["clave"]:
+        nuestras["YOUTUBE_API_KEY"] = datos["youtube"]["clave"]
     if datos["jamendo"]["clave"]:
         nuestras["JAMENDO_CLIENT_ID"] = datos["jamendo"]["clave"]
     if datos["freesound"]["clave"]:
@@ -490,7 +497,7 @@ def espejar_env(datos=None):
     # Los nombres que ESTA pantalla escribe. Lo que no este aqui se conserva tal
     # cual y en su orden: un .env puede tener cosas que nadie de aqui gestiona.
     gestionadas = {"OPENAI_API_KEY", "CARTESIA_API_KEY", "KIE_API_KEY",
-                   "GEMINI_API_KEY",
+                   "GEMINI_API_KEY", "YOUTUBE_API_KEY",
                    "JAMENDO_CLIENT_ID", "FREESOUND_API_KEY"} | {
         f"OPENAI_API_KEY_{i}" for i in range(2, MAX_OPENAI + 1)}
 
@@ -546,6 +553,7 @@ def _rellenar_del_env(datos):
     for suelta, nombre in (("cartesia", "CARTESIA_API_KEY"),
                            ("kie", "KIE_API_KEY"),
                            ("gemini", "GEMINI_API_KEY"),
+                           ("youtube", "YOUTUBE_API_KEY"),
                            ("jamendo", "JAMENDO_CLIENT_ID"),
                            ("freesound", "FREESOUND_API_KEY")):
         if (datos.get(suelta) or {}).get("clave"):
@@ -579,6 +587,10 @@ def resumen(datos=None):
         "gemini": {
             "puesta": bool(datos["gemini"]["clave"]),
             "cola": tapar(datos["gemini"]["clave"]),
+        },
+        "youtube": {
+            "puesta": bool(datos["youtube"]["clave"]),
+            "cola": tapar(datos["youtube"]["clave"]),
         },
         "claude_cli": {
             "cuentas": [{
