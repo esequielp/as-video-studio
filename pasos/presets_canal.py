@@ -782,7 +782,18 @@ def _sembrar_ficheros(tipo, pid, datos, miniatura, anterior):
     referencia_miniatura = str(miniatura or "").strip() or rutas[0]
     try:
         for indice, origen in enumerate(rutas):
-            nombre = f"{indice:02d}_{os.path.basename(origen)}"
+            # EL PREFIJO SE PONE UNA VEZ, NO UNA POR GUARDADO.
+            #
+            # `guardar` corre en CADA edicion --nombre, idioma, ritmo, voz-- y
+            # vuelve a copiar las laminas. Cuando el origen YA es el banco (que
+            # es lo normal al editar), su nombre ya trae el `NN_`, asi que
+            # concatenar otro daba `00_00_cara.png`, luego `00_00_00_cara.png`...
+            # Visto con seis prefijos encima y el preset apuntando a ficheros
+            # que ya no existian: «estos fotogramas no estan en el disco».
+            base = os.path.basename(origen)
+            if os.path.dirname(os.path.abspath(origen)) == os.path.abspath(destino):
+                base = re.sub(r"^\d{2}_", "", base, count=1)
+            nombre = f"{indice:02d}_{base}"
             final = os.path.join(trabajo, nombre)
             shutil.copyfile(origen, final)
             copiadas.append(final)
