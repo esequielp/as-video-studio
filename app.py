@@ -6743,8 +6743,16 @@ def renombrar_preset_canal(pid: str, cuerpo: dict = Body(default=None)):
 
 
 @app.get("/api/presets-canal/{pid}/miniatura")
-def miniatura_preset_canal(pid: str, peticion: Request):
-    """La cara del preset en el desplegable: uno de sus propios fotogramas."""
+def miniatura_preset_canal(pid: str, peticion: Request, mini: int = 0):
+    """La cara del preset en el desplegable: uno de sus propios fotogramas.
+
+    CON `mini` SE SIRVE REDUCIDA, y la galeria la pide SIEMPRE. La miniatura de
+    un preset es un PNG de generacion: medido, 4,5 MB. Cinco estilos en la
+    rejilla son 22 MB para pintar una portada donde cada tarjeta ocupa 280 px
+    -- y por un tunel SSH contra un servidor, eso son varios segundos de
+    cuadros en blanco. La reducida pesa unas cien veces menos y se cachea por
+    ruta+mtime, asi que rehacer el estilo produce otra sola.
+    """
     ficha = _preset_o_400(lambda p: p.leer(pid))
     presets = _presets()
     # LA RUTA GUARDADA NO SE USA TAL CUAL, solo su nombre: la miniatura vive
@@ -6759,11 +6767,16 @@ def miniatura_preset_canal(pid: str, peticion: Request):
         raise ErrorApi(404, f"el preset {pid} no tiene miniatura")
     if not os.path.isfile(ruta):
         raise ErrorApi(404, f"la miniatura del preset {pid} ya no esta en el disco")
+    if mini:
+        reducida = _miniatura_de(ruta, mini if mini in ANCHOS_MINI else None)
+        if reducida:
+            return FileResponse(reducida, media_type="image/jpeg",
+                                headers={"Cache-Control": "public, max-age=86400"})
     return servir_fichero(peticion, ruta)
 
 
 @app.get("/api/presets-canal/{pid}/fichero/{archivo:path}")
-def fichero_preset_canal(pid: str, archivo: str, peticion: Request):
+def fichero_preset_canal(pid: str, archivo: str, peticion: Request, mini: int = 0):
     """Un fichero de la carpeta del preset (fotogramas, laminas del moodboard).
 
     Existe para poder PREVISUALIZAR un preset entero: sus referencias viven en
@@ -6779,6 +6792,13 @@ def fichero_preset_canal(pid: str, archivo: str, peticion: Request):
         raise ErrorApi(400, str(fallo))
     if not os.path.isfile(destino):
         raise ErrorApi(404, f"el preset {pid} no tiene el fichero {archivo!r}")
+    # LAS LAMINAS TAMBIEN PESAN: 9-10 MB cada una, y la ficha de un estilo
+    # enseña las seis. Con `mini` se sirven reducidas; la lupa pide el original.
+    if mini:
+        reducida = _miniatura_de(destino, mini if mini in ANCHOS_MINI else None)
+        if reducida:
+            return FileResponse(reducida, media_type="image/jpeg",
+                                headers={"Cache-Control": "public, max-age=86400"})
     return servir_fichero(peticion, destino)
 
 

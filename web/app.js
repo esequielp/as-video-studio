@@ -479,8 +479,12 @@ const API = {
      rehacer una parte deja el MISMO nombre de fichero apuntando a otra imagen, y
      sin el sello el navegador sigue enseñando la de antes. Se notó al recomponer
      las muestras: la ficha ya tenía las seis y la tarjeta seguía con el 2×2. */
+  /* `mini=512` SIEMPRE: la tarjeta de un estilo mide 280 px y la miniatura
+     guardada es un PNG de generación de 4,5 MB. Cinco estilos eran 22 MB para
+     pintar la portada; reducida son unos 50 KB cada una. Se nota en local y es
+     la diferencia entre usable y no usable contra un servidor. */
   presetCanalMiniatura: (id, sello) => `${BASE}/api/presets-canal/${encodeURIComponent(id)}`
-    + `/miniatura${sello ? `?v=${encodeURIComponent(sello)}` : ''}`,
+    + `/miniatura?mini=512${sello ? `&v=${encodeURIComponent(sello)}` : ''}`,
   personajes: pid => `${BASE}/api/proyectos/${pid}/personajes`,
   personajeHoja: pid => `${BASE}/api/proyectos/${pid}/personajes/hoja`,
   personaje: (pid, id) => `${BASE}/api/proyectos/${pid}/personajes/${encodeURIComponent(id)}`,
@@ -10221,9 +10225,13 @@ function bannerMuestras(ficha) {
 function tiraDeImagenes(ficha, nombres) {
   const tira = h('div', { clase: 'tira' });
   nombres.forEach(nombre => {
-    const url = `${API.presetCanalFichero(ficha.id, nombre)}?v=${ficha.modificado || ''}`;
+    /* LA TIRA PIDE REDUCIDA Y LA LUPA EL ORIGINAL. Cada lámina es un PNG de
+       9-10 MB y la tira enseña seis: por un túnel contra el servidor eso es
+       medio minuto de huecos en blanco. Al ampliar sí se baja entera, que es
+       cuando hace falta ver el detalle del trazo. */
+    const base = `${API.presetCanalFichero(ficha.id, nombre)}?v=${ficha.modificado || ''}`;
     tira.appendChild(h('img', {
-      src: url, alt: '', loading: 'lazy', onclick: () => lupa(url),
+      src: `${base}&mini=512`, alt: '', loading: 'lazy', onclick: () => lupa(base),
     }));
   });
   return tira;
